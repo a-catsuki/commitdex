@@ -1,66 +1,29 @@
-export const CARD_SYSTEM_PROMPT = `You generate a "creature card" from a single git commit message. Output ONLY valid JSON, no markdown fences, no preamble.
+export const CARD_SYSTEM_PROMPT = `Mint one collectible creature from THIS git commit. JSON only.
 
-Classify the message into exactly one type: lazy, vague, panic, overconfident,
-passive-aggressive, corporate, chaotic, emoji.
+name: one lowercase invented word, no spaces. Pun or portmanteau of words that actually appear in this commit so the message is still audible in the name. Must reuse letter chunks from at least two distinct words in the commit (or the only word, if it is a single token). Unique to this message. Ban suffixes -odile -scream -geist -puff -zard -sting -bot -moji. Ban stock names fixodile pleascream asdfgeist updatoth wipuff stufflax. Ban generic unused words like glitch, blob, sprite.
 
-Score each stat 0-100 based on the message text alone:
-- clarity: how clearly it communicates what changed
-- effort: how much thought appears to have gone into writing it
-- honesty: how likely the message accurately describes the change (vague/overconfident messages score low)
-- chaos: how unhinged, unpredictable, or funny it is
+type: exactly one of lazy | vague | panic | overconfident | passive-aggressive | corporate | chaotic | emoji. Justify from the writing, never at random. lazy=generic verbs/minimal effort. vague=does not say what changed. panic=caps, please, desperation. overconfident=promises the world. passive-aggressive=subtext at a person. corporate=jargon/performance-review tone. chaotic=noise, smash, unhinged. emoji=mostly pictographs.
 
-Assign rarity based on how unusual or funny the message is: common, uncommon, rare, legendary, or shiny (shiny only for genuinely bizarre outliers).
+flavor_text: 1–2 Pokedex sentences, third person. Quote or echo the actual wording. Roast the writing, not a generic type blurb.
 
-Generate a punny one-word creature "name" derived from the message content. Lowercase. No spaces.
+stats 0–100 from the text: clarity=says what changed; effort=care in the writing; honesty=likely matches a real change (vague/overconfident score low); chaos=unhinged, unpredictable, or funny.
 
-Write one sentence of "flavor_text" in Pokedex-entry voice (third person, describes
-the species' behavior "in the wild") that matches the assigned type's tone.
-Panic-type flavor reads frantic. Corporate-type flavor reads like a performance review.
-Lazy-type flavor sounds bored. Passive-aggressive flavor has subtext.
+rarity: common=generic ("fix","update"); uncommon=a little personality; rare=genuinely funny or specific; legendary=structurally unusual (ALL CAPS, extremely short, or extremely long); shiny=bizarre outlier only (keyboard smash, DO NOT MERGE, one-offs).
 
-Output schema:
-{
-  "name": string,
-  "type": "lazy" | "vague" | "panic" | "overconfident" | "passive-aggressive" | "corporate" | "chaotic" | "emoji",
-  "rarity": "common" | "uncommon" | "rare" | "legendary" | "shiny",
-  "stats": { "clarity": number, "effort": number, "honesty": number, "chaos": number },
-  "flavor_text": string
-}`;
+No markdown. No commentary. No extra keys.`;
 
-export const CARD_JSON_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    name: { type: "string" },
-    type: {
-      type: "string",
-      enum: [
-        "lazy",
-        "vague",
-        "panic",
-        "overconfident",
-        "passive-aggressive",
-        "corporate",
-        "chaotic",
-        "emoji",
-      ],
-    },
-    rarity: {
-      type: "string",
-      enum: ["common", "uncommon", "rare", "legendary", "shiny"],
-    },
-    stats: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        clarity: { type: "integer", minimum: 0, maximum: 100 },
-        effort: { type: "integer", minimum: 0, maximum: 100 },
-        honesty: { type: "integer", minimum: 0, maximum: 100 },
-        chaos: { type: "integer", minimum: 0, maximum: 100 },
-      },
-      required: ["clarity", "effort", "honesty", "chaos"],
-    },
-    flavor_text: { type: "string" },
-  },
-  required: ["name", "type", "rarity", "stats", "flavor_text"],
-} as const;
+export const CARD_JSON_HINT = `{"name":"lowercase portmanteau from this commit","type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","rarity":"common|uncommon|rare|legendary|shiny","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"flavor_text":"1-2 Pokedex sentences quoting this commit"}`;
+
+export const PROFILE_SYSTEM_PROMPT = `Invent a trainer profile from one person's real git commit messages. JSON only.
+
+persona_title: a short original epithet that could only fit THIS batch (messages + timing: nights, weekends, bursts). Do not use stock titles like "the midnight fixer" or "weekend diplomat".
+
+dominant_type: exactly one of lazy, vague, panic, overconfident, passive-aggressive, corporate, chaotic, emoji. Must match the batch.
+
+stats 0–100 (clarity, effort, honesty, chaos): spirit of the batch, not a literal mean.
+
+predictions: 3–5 jokes, not real inferences. Specific (named drink, object, habit) plus a tabler icon (ti-coffee, ti-moon, ti-keyboard). Ground persona and at least one prediction in something that actually appears in the batch.
+
+No markdown. No commentary.`;
+
+export const PROFILE_JSON_HINT = `{"dominant_type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","persona_title":"short original epithet","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"predictions":[{"icon":"ti-coffee","text":"joke grounded in these commits"}]}`;

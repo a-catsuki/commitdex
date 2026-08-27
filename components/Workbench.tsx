@@ -1,13 +1,28 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CardPack } from "@/components/CardPack";
 import { CommitPrompt } from "@/components/CommitPrompt";
 import { CreatureCard } from "@/components/CreatureCard";
+import { PrintBay } from "@/components/PrintBay";
 import { downloadCardPng } from "@/lib/download-card";
+import {
+  PRINT_STAGES,
+  RITUAL_MS,
+  RITUAL_MS_REDUCED,
+  STAGE_MS,
+  prefersReducedMotion,
+} from "@/lib/ritual";
 import { SAMPLE_COMMITS } from "@/lib/type-meta";
 import type { CreatureCard as CardData } from "@/lib/types";
 
 type Status = "idle" | "loading" | "error" | "success";
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
 
 export function Workbench() {
   const [message, setMessage] = useState("");
@@ -15,14 +30,31 @@ export function Workbench() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [stageIndex, setStageIndex] = useState(0);
+  const [reduced, setReduced] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
+  const runRef = useRef(0);
 
   async function classify(nextMessage = message) {
     const trimmed = nextMessage.trim();
     if (!trimmed) return;
 
+    const run = ++runRef.current;
+    const motionOff = prefersReducedMotion();
+    const floor = motionOff ? RITUAL_MS_REDUCED : RITUAL_MS;
+    const started = performance.now();
+
+    setReduced(motionOff);
     setStatus("loading");
     setError(undefined);
+    setCard(null);
+    setStageIndex(0);
+
+    const tick = motionOff
+      ? undefined
+      : window.setInterval(() => {
+          setStageIndex((index) => Math.min(index + 1, PRINT_STAGES.length - 1));
+        }, STAGE_MS);
 
     try {
       const response = await fetch("/api/classify", {
@@ -34,15 +66,23 @@ export function Workbench() {
       if (!response.ok) {
         throw new Error(payload.error ?? "Classifier returned an error.");
       }
+
+      const wait = floor - (performance.now() - started);
+      if (wait > 0) await sleep(wait);
+      if (runRef.current !== run) return;
+
       setCard(payload);
       setStatus("success");
     } catch (err) {
+      if (runRef.current !== run) return;
       setStatus("error");
       setError(
         err instanceof Error
           ? err.message
           : "The classifier did not return a creature. Try again.",
       );
+    } finally {
+      if (tick) window.clearInterval(tick);
     }
   }
 
@@ -59,6 +99,8 @@ export function Workbench() {
     }
   }
 
+  const stage = PRINT_STAGES[Math.min(stageIndex, PRINT_STAGES.length - 1)];
+
   return (
     <section className="bench" id="classify">
       <div className="bench__copy">
@@ -72,17 +114,18 @@ export function Workbench() {
         />
         <ul className="samples">
           {SAMPLE_COMMITS.map((sample) => (
-            <li key={sample}>
+            <li key={sample.message}>
               <button
                 type="button"
                 className="sample"
+                data-type={sample.type}
                 onClick={() => {
-                  setMessage(sample);
-                  void classify(sample);
+                  setMessage(sample.message);
+                  void classify(sample.message);
                 }}
                 disabled={status === "loading"}
               >
-                {sample}
+                {sample.message}
               </button>
             </li>
           ))}
@@ -90,9 +133,13 @@ export function Workbench() {
       </div>
 
       <div className="bench__tray">
-        {card ? (
+        {status === "loading" ? (
+          <PrintBay stage={stage} reduced={reduced} />
+        ) : card ? (
           <>
-            <CreatureCard ref={cardRef} card={card} />
+            <CardPack reduced={reduced}>
+              <CreatureCard ref={cardRef} card={card} />
+            </CardPack>
             <div className="bench__actions">
               <button
                 type="button"
@@ -103,19 +150,14 @@ export function Workbench() {
               >
                 {saving ? "saving…" : "download png"}
               </button>
-              {card.source === "heuristic" ? (
-                <p className="bench__note">
-                  Classified locally. Set ANTHROPIC_API_KEY for Claude.
-                </p>
-              ) : (
-                <p className="bench__note">Classified by Claude.</p>
-              )}
+              <p className="bench__note">Roasted by {card.model}.</p>
             </div>
           </>
         ) : (
-          <div className="tray-empty" aria-live="polite">
-            <p>{status === "loading" ? "printing specimen…" : "no specimen yet"}</p>
-            <p>Waiting on a commit message.</p>
+          <div className="tray-empty" data-state="idle" aria-live="polite">
+            <p className="tray-empty__kicker">empty slot</p>
+            <p className="tray-empty__title">No specimen yet</p>
+            <p>Feed the classifier a commit to lock a card.</p>
           </div>
         )}
       </div>

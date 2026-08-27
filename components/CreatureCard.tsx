@@ -35,7 +35,10 @@ export const CreatureCard = forwardRef<HTMLElement, Props>(function CreatureCard
         <p className="dex-card__rarity">{RARITY_LABEL[card.rarity]}</p>
       </header>
 
-      <p className="dex-card__type">{meta.label} type</p>
+      <p className="dex-card__type">
+        <span className="type-chip type-chip--on-card">{meta.label}</span>
+        <span className="dex-card__type-word">type</span>
+      </p>
 
       <div className="dex-card__art">
         <CreatureArt type={card.type} />

@@ -1,3 +1,4 @@
+import { TypeChip } from "@/components/TypeChip";
 import { CREATURE_TYPES } from "@/lib/types";
 import { TYPE_META } from "@/lib/type-meta";
 
@@ -18,14 +19,9 @@ export function TypeSheet() {
           {CREATURE_TYPES.map((type) => {
             const meta = TYPE_META[type];
             return (
-              <tr key={type}>
+              <tr key={type} className="spec-sheet__row" data-type={type}>
                 <th scope="row">
-                  <span
-                    className="type-swatch"
-                    style={{ background: `var(${meta.cssVar})` }}
-                    aria-hidden="true"
-                  />
-                  {meta.label}
+                  <TypeChip type={type} />
                 </th>
                 <td>{meta.trait}</td>
                 <td>

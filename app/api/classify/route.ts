@@ -1,36 +1,15 @@
 import { NextResponse } from "next/server";
 import { classifyCommit } from "@/lib/classify";
+import { MODEL_JSON_ERROR } from "@/lib/openrouter";
+import { clientKey, rateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const MAX_MESSAGE_LENGTH = 500;
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 20;
-const hits = new Map<string, number[]>();
-
-function clientKey(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "local"
-  );
-}
-
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_PER_WINDOW) {
-    hits.set(key, recent);
-    return true;
-  }
-  recent.push(now);
-  hits.set(key, recent);
-  return false;
-}
 
 export async function POST(request: Request) {
-  if (rateLimited(clientKey(request))) {
+  if (rateLimited(clientKey(request), 20)) {
     return NextResponse.json(
       {
         error: "Too many specimens from this address. Wait a minute, then print again.",
@@ -75,9 +54,16 @@ export async function POST(request: Request) {
     return NextResponse.json(card);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unknown error";
+    if (
+      /Unexpected token|not valid JSON|did not return a card or trainer|safety filter/i.test(
+        detail,
+      )
+    ) {
+      return NextResponse.json({ error: MODEL_JSON_ERROR }, { status: 502 });
+    }
     return NextResponse.json(
       {
-        error: `The classifier failed (${detail}). Check ANTHROPIC_API_KEY, or retry.`,
+        error: `The classifier failed (${detail}). Check OPENROUTER_API_KEY, or retry.`,
       },
       { status: 502 },
     );

@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local D1 stand-in
+/data/*.sqlite
+/data/*.sqlite-journal
+/data/*.sqlite-wal
+.wrangler/

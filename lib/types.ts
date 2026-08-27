@@ -35,7 +35,8 @@ export type CreatureCard = {
   stats: CardStats;
   flavor_text: string;
   original_message: string;
-  source: "claude" | "heuristic";
+  source: "openrouter";
+  model: string;
 };
 
 export function isCreatureType(value: string): value is CreatureType {

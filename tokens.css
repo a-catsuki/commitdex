@@ -5,6 +5,7 @@
  * audience: developers who share ugly commits · use: paste one message, print a roasted card
  * F3 knobs: columns=3 · rules=every-row · numbers=tabular
  * paper-band: dark · display-style: mono · accent-hue: phosphor
+ * color strategy: full palette — phosphor chrome + type/league HUD, not rainbow soup
  */
 
 :root {
@@ -80,6 +81,9 @@
   --dur-micro: 120ms;
   --dur-short: 220ms;
   --dur-long: 420ms;
+  --dur-pack: 900ms;
+  --dur-feed: 1400ms;
+  --dur-scan: 1100ms;
 
   --z-base: 1;
   --z-raised: 10;
@@ -89,23 +93,33 @@
   --z-modal: 400;
   --z-toast: 500;
   --z-tooltip: 600;
+  --z-boot: 550;
   --banner-height: 44px;
 
-  /* Type colors live on the printed card, never on page chrome. */
-  --type-lazy: oklch(58% 0.09 145);
-  --type-lazy-paper: oklch(18% 0.03 145);
-  --type-vague: oklch(64% 0.12 290);
-  --type-vague-paper: oklch(16% 0.04 290);
-  --type-panic: oklch(64% 0.2 35);
-  --type-panic-paper: oklch(16% 0.05 35);
-  --type-overconfident: oklch(74% 0.15 85);
-  --type-overconfident-paper: oklch(18% 0.04 85);
-  --type-passive-aggressive: oklch(72% 0.18 120);
-  --type-passive-aggressive-paper: oklch(16% 0.05 120);
-  --type-corporate: oklch(62% 0.08 250);
-  --type-corporate-paper: oklch(16% 0.03 250);
-  --type-chaotic: oklch(64% 0.2 330);
-  --type-chaotic-paper: oklch(16% 0.05 330);
-  --type-emoji: oklch(72% 0.16 25);
-  --type-emoji-paper: oklch(18% 0.04 25);
+  --league-bronze: oklch(62% 0.12 55);
+  --league-silver: oklch(78% 0.04 240);
+  --league-gold: oklch(78% 0.14 85);
+  --league-platinum: oklch(82% 0.06 210);
+  --league-legendary: oklch(76% 0.16 85);
+
+  --hud-ink: var(--color-accent);
+  --hud-paper: var(--color-paper-2);
+
+  /* Type palettes: cards first, then chips / posters / HUD tints. */
+  --type-lazy: oklch(62% 0.12 145);
+  --type-lazy-paper: oklch(18% 0.04 145);
+  --type-vague: oklch(68% 0.14 290);
+  --type-vague-paper: oklch(16% 0.05 290);
+  --type-panic: oklch(66% 0.21 35);
+  --type-panic-paper: oklch(16% 0.06 35);
+  --type-overconfident: oklch(76% 0.16 85);
+  --type-overconfident-paper: oklch(18% 0.05 85);
+  --type-passive-aggressive: oklch(74% 0.19 120);
+  --type-passive-aggressive-paper: oklch(16% 0.06 120);
+  --type-corporate: oklch(66% 0.1 250);
+  --type-corporate-paper: oklch(16% 0.04 250);
+  --type-chaotic: oklch(68% 0.21 330);
+  --type-chaotic-paper: oklch(16% 0.06 330);
+  --type-emoji: oklch(74% 0.18 25);
+  --type-emoji-paper: oklch(18% 0.05 25);
 }

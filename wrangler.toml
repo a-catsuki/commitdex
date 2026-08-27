@@ -1,0 +1,12 @@
+name = "commitdex"
+compatibility_date = "2026-08-01"
+
+# Used only if you apply schema with Wrangler. Next.js talks to D1 over HTTP
+# (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN + CLOUDFLARE_D1_DATABASE_ID)
+# or falls back to data/commitdex.local.sqlite.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "commitdex"
+database_id = "dd63da59-4a43-43d6-8ea3-ada61fda1251"
+migrations_dir = "d1/migrations"

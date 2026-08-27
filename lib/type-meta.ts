@@ -76,12 +76,12 @@ export const RARITY_LABEL: Record<Rarity, string> = {
 };
 
 export const SAMPLE_COMMITS = [
-  "fix stuff",
-  "PLEASE WORK",
-  "changes",
-  "resolved issue pertaining to auth flow",
-  "asdfasdf",
-  "🔥🔥🔥",
-  "fixed the bug THEY caused",
-  "final version I swear",
+  { message: "fix stuff", type: "lazy" },
+  { message: "PLEASE WORK", type: "panic" },
+  { message: "changes", type: "vague" },
+  { message: "resolved issue pertaining to auth flow", type: "corporate" },
+  { message: "asdfasdf", type: "chaotic" },
+  { message: "🔥🔥🔥", type: "emoji" },
+  { message: "fixed the bug THEY caused", type: "passive-aggressive" },
+  { message: "final version I swear", type: "overconfident" },
 ] as const;
