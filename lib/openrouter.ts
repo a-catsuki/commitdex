@@ -22,7 +22,12 @@ const BAD_MODEL_ERROR =
 const TIMEOUT_ERROR = "The classifier timed out. Retry the scan.";
 
 type ChatChoice = {
-  message?: { content?: string | Array<{ type?: string; text?: string }> };
+  message?: {
+    content?: string | Array<{ type?: string; text?: string }> | null;
+    reasoning?: string | null;
+    reasoning_content?: string | null;
+  };
+  finish_reason?: string | null;
 };
 
 type ChatResponse = {
@@ -30,15 +35,34 @@ type ChatResponse = {
   model?: string;
   error?: { message?: string; code?: number };
   choices?: ChatChoice[];
+  usage?: {
+    completion_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
 };
 
-function messageText(choice: ChatChoice | undefined): string {
-  const content = choice?.message?.content;
+function contentToText(
+  content: string | Array<{ type?: string; text?: string }> | null | undefined,
+): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
       .map((part) => (typeof part.text === "string" ? part.text : ""))
       .join("\n");
+  }
+  return "";
+}
+
+function messageText(choice: ChatChoice | undefined): string {
+  const message = choice?.message;
+  const primary = contentToText(message?.content);
+  if (primary.trim()) return primary;
+
+  // DeepSeek occasionally parks JSON in reasoning when content is empty.
+  for (const fallback of [message?.reasoning, message?.reasoning_content]) {
+    if (typeof fallback === "string" && fallback.includes("{") && fallback.includes("}")) {
+      return fallback;
+    }
   }
   return "";
 }
@@ -166,8 +190,16 @@ function parseReply(data: ChatResponse, requested: string): { parsed: Record<str
     throw new Error(MODEL_JSON_ERROR);
   }
 
-  const text = messageText(data.choices?.[0]);
+  const choice = data.choices?.[0];
+  const text = messageText(choice);
   if (!text.trim() || looksLikeSafetyOnly(text)) {
+    const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens;
+    console.error("[commitdex:openrouter] empty JSON reply", {
+      model: used,
+      finish: choice?.finish_reason ?? null,
+      completion_tokens: data.usage?.completion_tokens ?? null,
+      reasoning_tokens: reasoningTokens ?? null,
+    });
     throw new Error(MODEL_JSON_ERROR);
   }
 
@@ -204,11 +236,16 @@ export async function completeJson(
   };
 
   if (typeof options.reasoningMaxTokens === "number") {
-    body.reasoning = { exclude: true, max_tokens: options.reasoningMaxTokens };
+    // Prefer a small budget over exclude:true — DeepSeek V4 Flash often
+    // returns null content when reasoning is excluded.
+    body.reasoning = { max_tokens: options.reasoningMaxTokens };
   }
+  // Do not send reasoning.exclude / enabled:false for DeepSeek V4 Flash —
+  // omit the field so completion tokens stay available for JSON.
 
   const data = await chatOnce(body, timeoutMs);
   return parseReply(data, model);
 }
 
-export const CLASSIFY_TIMEOUT_MS = 8_000;
+/** Allow slow providers; ritual UI keeps a 5s floor separately. */
+export const CLASSIFY_TIMEOUT_MS = 15_000;

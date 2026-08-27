@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS commitdex_trainers (
   reel_commits TEXT NOT NULL DEFAULT '[]',
   featured_card TEXT,
   featured_at TEXT,
+  photo_url TEXT,
+  photo_data TEXT,
+  photo_updated_at TEXT,
   computed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -30,6 +33,9 @@ export const TRAINER_ALTER_SQL = `
 ALTER TABLE commitdex_trainers ADD COLUMN reel_commits TEXT;
 ALTER TABLE commitdex_trainers ADD COLUMN featured_card TEXT;
 ALTER TABLE commitdex_trainers ADD COLUMN featured_at TEXT;
+ALTER TABLE commitdex_trainers ADD COLUMN photo_url TEXT;
+ALTER TABLE commitdex_trainers ADD COLUMN photo_data TEXT;
+ALTER TABLE commitdex_trainers ADD COLUMN photo_updated_at TEXT;
 `;
 
 export function splitSqlStatements(sql: string): string[] {

@@ -14,7 +14,7 @@ import {
   prefersReducedMotion,
 } from "@/lib/ritual";
 import { SAMPLE_COMMITS } from "@/lib/type-meta";
-import type { CreatureCard as CardData } from "@/lib/types";
+import { isCreatureCard, type CreatureCard as CardData } from "@/lib/types";
 
 type Status = "idle" | "loading" | "error" | "success";
 
@@ -71,6 +71,13 @@ export function Workbench() {
             ? payload.error
             : "The pokedex jammed. Try again in a minute.",
         );
+        return;
+      }
+
+      if (!isCreatureCard(payload)) {
+        if (runRef.current !== run) return;
+        setStatus("error");
+        setError("The classifier mumbled. Print again.");
         return;
       }
 

@@ -1,8 +1,8 @@
 {
-  "scannedAt": "2026-08-27",
-  "fontStack": "none (empty create-next-app)",
-  "palette": "none",
-  "motion": "none",
-  "spacing": "none",
-  "framework": "Next.js 16 App Router + Tailwind v4"
+  "scannedAt": "2026-08-28",
+  "fontStack": "JetBrains Mono + Chakra Petch + Bricolage Grotesque (tokens.css / next/font)",
+  "palette": "Terminal CRT OKLCH phosphor (tokens.css) + type/league HUD colors",
+  "motion": "CSS-only (--ease-out / --dur-*); no framer-motion",
+  "spacing": "4pt named scale in tokens.css (--space-3xs…4xl)",
+  "framework": "Next.js App Router + Tailwind v4"
 }

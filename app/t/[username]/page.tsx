@@ -2,16 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DexReel } from "@/components/DexReel";
-import { CreatureCard } from "@/components/CreatureCard";
-import { LeagueBadge } from "@/components/LeagueBadge";
+import { DossierDailyPick } from "@/components/DossierDailyPick";
+import { DossierPhotobooth } from "@/components/DossierPhotobooth";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
+import { TrainerRadar } from "@/components/TrainerRadar";
 import { TrainerScan } from "@/components/TrainerScan";
 import { TypeChip } from "@/components/TypeChip";
 import { curateCommitsForSpin } from "@/lib/curate";
-import { getTrainer } from "@/lib/db";
+import { getTrainer, trainerPhotoSrc } from "@/lib/db";
 import { fetchPublicCommits } from "@/lib/github";
+import { LEAGUE_LABEL } from "@/lib/league";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
+import { predictionIconLabel } from "@/lib/prediction-icons";
 import { COPY } from "@/lib/public-error";
 import { evaluateSpinEligibility, isNewUtcDaySince } from "@/lib/spin-eligibility";
 import { TYPE_META } from "@/lib/type-meta";
@@ -22,6 +25,27 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   params: Promise<{ username: string }>;
 };
+
+const HUD_STATS = [
+  ["clarity", "CLR"],
+  ["effort", "EFF"],
+  ["honesty", "HON"],
+  ["chaos", "CHA"],
+] as const;
+
+/** Short STATUS pill from spin eligibility — never opaque "FOIL LOCKED". */
+function spinStatusLabel(
+  hasFeatured: boolean,
+  canSpin: boolean,
+  spinLockedReason: string | null,
+): string {
+  if (!hasFeatured) return "SPIN READY";
+  if (canSpin) return "RESPIN OPEN";
+  if (spinLockedReason === COPY.alreadyPulledToday) return "ALREADY PULLED TODAY";
+  if (spinLockedReason === COPY.noNewSpecimens) return "WAITING ON NEW COMMITS";
+  return "PICK LOCKED UNTIL TOMORROW";
+}
+
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { username } = await params;
@@ -74,12 +98,25 @@ export default async function TrainerPage({ params }: PageProps) {
     }
   }
 
-  const stats = [
-    ["clarity", trainer.clarity],
-    ["effort", trainer.effort],
-    ["honesty", trainer.honesty],
-    ["chaos", trainer.chaos],
-  ] as const;
+  const stats = {
+    clarity: trainer.clarity,
+    effort: trainer.effort,
+    honesty: trainer.honesty,
+    chaos: trainer.chaos,
+  };
+
+  const mugshot = trainerPhotoSrc(trainer);
+  const headShot = mugshot ?? trainer.avatar_url;
+  const foilLocked = Boolean(trainer.featured_card && !canSpin);
+  const statusLabel = spinStatusLabel(
+    Boolean(trainer.featured_card),
+    canSpin,
+    spinLockedReason,
+  );
+
+  const showBooth = Boolean(trainer.featured_card);
+  const hasSpecimen =
+    Boolean(trainer.featured_card) || reel.length > 0;
 
   return (
     <>
@@ -91,83 +128,163 @@ export default async function TrainerPage({ params }: PageProps) {
           <span>@{trainer.github_username}</span>
         </p>
 
-        <header className="dossier__head" data-type={type}>
-          {trainer.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              className="dossier__avatar"
-              src={trainer.avatar_url}
-              alt=""
-              width={72}
-              height={72}
-            />
-          ) : null}
-          <div className="dossier__id">
-            <p className="dossier__handle">@{trainer.github_username}</p>
-            <h1 className="dossier__title">{trainer.persona_title}</h1>
-            <p className="dossier__badges">
-              <TypeChip type={type} />
-              <LeagueBadge league={trainer.league} />
-              <span className="dossier__count">
-                {trainer.total_commits_analyzed} messages
-              </span>
-            </p>
-          </div>
-        </header>
-
-        {trainer.featured_card && canSpin && reel.length > 0 ? (
-          <DexReel username={trainer.github_username} reel={reel} mode="respin" />
-        ) : trainer.featured_card ? (
-          <section className="dossier__foil">
-            <h2>Allotted specimen</h2>
-            <p className="dossier__note">
-              {spinLockedReason ??
-                "One foil per UTC day. Fresh public commits unlock tomorrow's crank."}
-            </p>
-            <CreatureCard card={trainer.featured_card} />
+        <div className="dossier__bento" data-type={type}>
+          <section className="dossier-tile dossier-tile--id" aria-label="Trainer identity">
+            <header className="dossier__head">
+              {headShot ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className={
+                    mugshot ? "dossier__avatar dossier__avatar--mug" : "dossier__avatar"
+                  }
+                  src={headShot}
+                  alt=""
+                  width={48}
+                  height={48}
+                />
+              ) : null}
+              <div className="dossier__id">
+                <p className="dossier__handle">@{trainer.github_username}</p>
+                <h1 className="dossier__title">{trainer.persona_title}</h1>
+                <p className="dossier__badges">
+                  <TypeChip type={type} />
+                  <span className="dossier__count">
+                    {trainer.total_commits_analyzed} msg
+                  </span>
+                </p>
+              </div>
+            </header>
           </section>
-        ) : reel.length > 0 ? (
-          <DexReel username={trainer.github_username} reel={reel} mode="first" />
-        ) : null}
 
-        <dl className="dossier__stats" data-type={type}>
-          {stats.map(([label, value]) => (
-            <div key={label} className="dex-stat">
-              <dt>{label}</dt>
-              <dd>
-                <span className="dex-stat__track" aria-hidden="true">
-                  <span className="dex-stat__fill" style={{ ["--v" as string]: value }} />
-                </span>
-                <span className="dex-stat__n">{value}</span>
-              </dd>
+          <section className="dossier-tile dossier-tile--chaos" aria-label="Chaos score">
+            <p className="dossier-hud__label">CHAOS</p>
+            <p className="dossier-hud__num">{trainer.chaos}</p>
+          </section>
+
+          <section className="dossier-tile dossier-tile--league" aria-label="League">
+            <p className="dossier-hud__label">LEAGUE</p>
+            <p className="dossier-hud__league" data-league={trainer.league}>
+              {LEAGUE_LABEL[trainer.league]}
+            </p>
+          </section>
+
+          <section
+            className="dossier-tile dossier-tile--status"
+            aria-label={showBooth ? "Mugshot booth" : "Spin status"}
+          >
+            {/* Lock copy lives once on the specimen bar when a foil exists. */}
+            <p className="dossier-hud__label">{showBooth ? "MUGSHOT" : "STATUS"}</p>
+            {!showBooth ? (
+              <p
+                className={
+                  foilLocked
+                    ? "dossier-status-pill dossier-status-pill--locked"
+                    : "dossier-status-pill dossier-status-pill--open"
+                }
+              >
+                {statusLabel}
+              </p>
+            ) : (
+              <DossierPhotobooth
+                username={trainer.github_username}
+                existingPhotoUrl={mugshot}
+              />
+            )}
+          </section>
+
+          <section
+            className="dossier-tile dossier-tile--analytics"
+            aria-label="Trainer analytics"
+          >
+            <p className="dossier-hud__label">ANALYTICS</p>
+            <div className="dossier-analytics">
+              <TrainerRadar {...stats} />
+              <dl className="dossier__stats">
+                {HUD_STATS.map(([key, short]) => (
+                  <div key={key} className="dex-stat dossier-hud-stat">
+                    <dt>
+                      <span className="dossier-hud-stat__atk">{short}</span>
+                      <span className="dossier-hud-stat__name">{key}</span>
+                    </dt>
+                    <dd>
+                      <span className="dex-stat__track" aria-hidden="true">
+                        <span
+                          className="dex-stat__fill"
+                          style={{ ["--v" as string]: stats[key] }}
+                        />
+                      </span>
+                      <span className="dex-stat__n">{stats[key]}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </div>
-          ))}
-        </dl>
+          </section>
 
-        <section className="dossier__preds">
-          <h2>Predictions</h2>
-          <p className="dossier__note">
-            Locked on first scan. Written by {modelLabel(OPENROUTER_MODEL)}. Jokes, not surveillance.
-          </p>
-          <ol>
-            {trainer.predictions.map((prediction) => (
-              <li key={prediction.text}>{prediction.text}</li>
-            ))}
-          </ol>
-        </section>
+          {hasSpecimen ? (
+            <div className="dossier-tile dossier-tile--specimen">
+              {trainer.featured_card ? (
+                <DossierDailyPick
+                  username={trainer.github_username}
+                  card={trainer.featured_card}
+                  canSpin={canSpin}
+                  spinLockedReason={spinLockedReason}
+                  reel={reel}
+                  photoUrl={mugshot}
+                />
+              ) : reel.length > 0 ? (
+                <DexReel
+                  username={trainer.github_username}
+                  reel={reel}
+                  mode="first"
+                  photoUrl={mugshot}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
-        {trainer.sample_messages.length > 0 ? (
-          <section className="dossier__samples">
-            <h2>Evidence</h2>
-            <ul>
-              {trainer.sample_messages.map((message) => (
-                <li key={message}>
-                  <code>{message}</code>
+          <section className="dossier-tile dossier-tile--preds" aria-label="Predictions">
+            <div className="dossier-tile__head">
+              <h2>Predictions</h2>
+              <p className="dossier__note dossier__note--tight">
+                Locked on first scan · {modelLabel(OPENROUTER_MODEL)} · jokes, not surveillance
+              </p>
+            </div>
+            <ul className="dossier-preds">
+              {trainer.predictions.map((prediction, i) => (
+                <li key={`${i}-${prediction.text.slice(0, 24)}`} className="dossier-pred">
+                  <span className="dossier-pred__tag" aria-hidden="true">
+                    {predictionIconLabel(prediction.icon)}
+                  </span>
+                  <span className="dossier-pred__text" title={prediction.text}>
+                    {prediction.text}
+                  </span>
                 </li>
               ))}
             </ul>
           </section>
-        ) : null}
+
+          {trainer.sample_messages.length > 0 ? (
+            <section className="dossier-tile dossier-tile--evidence" aria-label="Evidence">
+              <div className="dossier-tile__head">
+                <h2>Evidence</h2>
+                <p className="dossier__note dossier__note--tight">
+                  {trainer.sample_messages.length} sample messages
+                </p>
+              </div>
+              <ol className="dossier-evidence">
+                {trainer.sample_messages.map((message, i) => (
+                  <li key={`${i}-${message.slice(0, 32)}`}>
+                    <span className="dossier-evidence__n" aria-hidden="true">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <code>{message}</code>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
+        </div>
 
         <TrainerScan />
       </main>

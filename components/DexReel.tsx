@@ -2,13 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { useSession, signIn } from "next-auth/react";
 import { CardPack } from "@/components/CardPack";
 import { CreatureCard } from "@/components/CreatureCard";
 import { hintReelTicket, reelLabel } from "@/lib/curate";
+import { sessionMatchesTrainer } from "@/lib/github-auth";
+import { prefetchNsfwModel, scheduleNsfwPrefetch } from "@/lib/nsfw-client";
+import { COPY } from "@/lib/public-error";
 import { prefersReducedMotion } from "@/lib/ritual";
 import { TYPE_META } from "@/lib/type-meta";
 import type { CreatureCard as CardData } from "@/lib/types";
+
+const Photobooth = dynamic(
+  () => import("@/components/Photobooth").then((m) => m.Photobooth),
+  { ssr: false },
+);
 
 const SPIN_MS = 2600;
 const RACE_MIN_MS = 480;
@@ -28,6 +38,8 @@ type Props = {
   mode?: "first" | "respin";
   /** Shown under a locked foil instead of a fake crank. */
   lockReason?: string | null;
+  /** Existing mugshot; booth stays opt-in and does not clear on re-spin. */
+  photoUrl?: string | null;
 };
 
 function sleep(ms: number) {
@@ -60,8 +72,10 @@ export function DexReel({
   lockedCard = null,
   mode = "first",
   lockReason = null,
+  photoUrl = null,
 }: Props) {
   const router = useRouter();
+  const { data: session, status: authStatus } = useSession();
   const stripRef = useRef<HTMLUListElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -73,14 +87,25 @@ export function DexReel({
   const [offset, setOffset] = useState(() => parkOffset(reel, lockedCard?.original_message));
   const [motion, setMotion] = useState<Motion>("rest");
   const [stride, setStride] = useState(FALLBACK_STRIDE);
+  const [boothOpen, setBoothOpen] = useState(false);
+  const [boothDone, setBoothDone] = useState(Boolean(photoUrl));
   const [highlight, setHighlight] = useState<number | null>(() => {
     if (!lockedCard) return null;
     const idx = reel.findIndex((m) => m === lockedCard.original_message);
     return idx >= 0 ? reel.length + idx : null;
   });
 
+  const login = session?.login;
+  const canBooth = sessionMatchesTrainer(login, username);
   const lockedView = Boolean(lockedCard) && phase === "printed";
   const canCrank = !lockedView && phase !== "spinning" && !card;
+  const showBoothOffer =
+    phase === "printed" && Boolean(card) && !lockedView && !boothDone && !boothOpen;
+
+  useEffect(() => {
+    if (!showBoothOffer || !canBooth) return;
+    return scheduleNsfwPrefetch();
+  }, [showBoothOffer, canBooth]);
 
   const strip = useMemo(() => {
     if (reel.length === 0) return [];
@@ -330,6 +355,99 @@ export function DexReel({
           <CardPack reduced={reduced}>
             <CreatureCard card={card} />
           </CardPack>
+
+          {showBoothOffer ? (
+            <div className="dex-reel__booth-offer">
+              {authStatus === "loading" ? (
+                <p className="dex-reel__booth-copy">checking GitHub…</p>
+              ) : !login ? (
+                <>
+                  <p className="dex-reel__booth-copy">{COPY.verifyGithub}</p>
+                  <div className="dex-reel__booth-actions">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() =>
+                        void signIn("github", {
+                          callbackUrl:
+                            typeof window !== "undefined"
+                              ? window.location.href
+                              : "/",
+                        })
+                      }
+                    >
+                      Verify with GitHub
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => setBoothDone(true)}
+                    >
+                      skip
+                    </button>
+                  </div>
+                </>
+              ) : !canBooth ? (
+                <>
+                  <p className="dex-reel__booth-copy" role="status">
+                    Signed in as @{login}. Mugshot bay is for @{username} only.
+                  </p>
+                  <div className="dex-reel__booth-actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => setBoothDone(true)}
+                    >
+                      skip
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="dex-reel__booth-copy">
+                    Optional CRT mugshot for the dossier?
+                  </p>
+                  <div className="dex-reel__booth-actions">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        prefetchNsfwModel();
+                        setBoothOpen(true);
+                      }}
+                    >
+                      open photobooth
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => setBoothDone(true)}
+                    >
+                      skip
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {boothOpen && !boothDone && canBooth ? (
+            <Photobooth
+              username={username}
+              existingPhotoUrl={photoUrl}
+              variant="reel"
+              onSaved={() => {
+                setBoothDone(true);
+                setBoothOpen(false);
+              }}
+              onRemoved={() => undefined}
+              onSkip={() => {
+                setBoothDone(true);
+                setBoothOpen(false);
+              }}
+            />
+          ) : null}
+
           <button
             type="button"
             className="btn"

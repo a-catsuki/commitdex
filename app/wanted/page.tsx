@@ -1,12 +1,9 @@
-import Link from "next/link";
-import { LeagueBadge } from "@/components/LeagueBadge";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { TrainerScan } from "@/components/TrainerScan";
-import { TypeChip } from "@/components/TypeChip";
+import { WantedWall, type WantedPoster } from "@/components/WantedWall";
 import { COPY } from "@/lib/public-error";
-import { listWanted } from "@/lib/db";
-import { isCreatureType } from "@/lib/types";
+import { listWanted, trainerPhotoSrc } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +13,20 @@ export const metadata = {
 };
 
 export default async function WantedPage() {
-  let trainers: Awaited<ReturnType<typeof listWanted>> = [];
+  let posters: WantedPoster[] = [];
   let loadError: string | null = null;
   try {
-    trainers = await listWanted(50);
+    const trainers = await listWanted(50);
+    posters = trainers.map((trainer) => ({
+      github_username: trainer.github_username,
+      avatar_url: trainer.avatar_url,
+      photo_url: trainerPhotoSrc(trainer),
+      persona_title: trainer.persona_title,
+      dominant_type: trainer.dominant_type,
+      league: trainer.league,
+      chaos: trainer.chaos,
+      featured_name: trainer.featured_card?.name ?? null,
+    }));
   } catch (error) {
     console.error("[commitdex:wanted]", error);
     loadError = COPY.wantedOffline;
@@ -41,57 +48,10 @@ export default async function WantedPage() {
           <p className="prompt__error" role="alert">
             {loadError}
           </p>
-        ) : trainers.length === 0 ? (
+        ) : posters.length === 0 ? (
           <p className="wanted__empty">No posters yet. Scan a username below and start the wall.</p>
         ) : (
-          <ol className="wanted__list">
-            {trainers.map((trainer, index) => {
-              const type = isCreatureType(trainer.dominant_type)
-                ? trainer.dominant_type
-                : "chaotic";
-              const rank = String(index + 1).padStart(2, "0");
-              return (
-                <li key={trainer.github_username}>
-                  <Link
-                    className="poster"
-                    href={`/t/${trainer.github_username}`}
-                    data-type={type}
-                    data-rank={index < 3 ? String(index + 1) : undefined}
-                  >
-                    <span className="poster__rank" aria-label={`Rank ${index + 1}`}>
-                      {rank}
-                    </span>
-                    {trainer.avatar_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        className="poster__mug"
-                        src={trainer.avatar_url}
-                        alt=""
-                        width={56}
-                        height={56}
-                      />
-                    ) : (
-                      <span className="poster__mug poster__mug--empty" aria-hidden="true" />
-                    )}
-                    <span className="poster__body">
-                      <span className="poster__name">@{trainer.github_username}</span>
-                      <span className="poster__title">{trainer.persona_title}</span>
-                      <span className="poster__meta">
-                        <TypeChip type={type} />
-                        <LeagueBadge league={trainer.league} />
-                        <span className="chaos-pip">chaos {trainer.chaos}</span>
-                        {trainer.featured_card ? (
-                          <span className="poster__foil">{trainer.featured_card.name}</span>
-                        ) : (
-                          <span className="poster__foil poster__foil--empty">no foil</span>
-                        )}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ol>
+          <WantedWall trainers={posters} />
         )}
 
         <TrainerScan />

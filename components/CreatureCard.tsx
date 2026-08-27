@@ -41,7 +41,12 @@ export const CreatureCard = forwardRef<HTMLElement, Props>(function CreatureCard
       </p>
 
       <div className="dex-card__art">
-        <CreatureArt type={card.type} />
+        <CreatureArt
+          type={card.type}
+          name={card.name}
+          rarity={card.rarity}
+          originalMessage={card.original_message}
+        />
         {card.rarity === "shiny" ? (
           <span className="dex-card__sparkles" aria-hidden="true" />
         ) : null}

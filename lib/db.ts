@@ -1,5 +1,6 @@
 import { query } from "./d1";
 import type { League } from "./league";
+import type { PhotoMime } from "./photo-store";
 import {
   clampStat,
   isCreatureType,
@@ -30,11 +31,19 @@ export type TrainerRow = {
   reel_commits: string[];
   featured_card: CreatureCard | null;
   featured_at: string | null;
+  /** Public URL or /api/trainer/photo/{user}. Null when no mugshot. */
+  photo_url: string | null;
+  /** Base64 JPEG/WebP when using D1 blob storage; otherwise null. */
+  photo_data: string | null;
+  photo_updated_at: string | null;
   computed_at: string;
   created_at: string;
 };
 
-type TrainerInsert = Omit<TrainerRow, "created_at">;
+type TrainerInsert = Omit<
+  TrainerRow,
+  "created_at" | "photo_url" | "photo_data" | "photo_updated_at"
+>;
 
 type TrainerRecord = {
   github_username: unknown;
@@ -53,12 +62,15 @@ type TrainerRecord = {
   reel_commits?: unknown;
   featured_card?: unknown;
   featured_at?: unknown;
+  photo_url?: unknown;
+  photo_data?: unknown;
+  photo_updated_at?: unknown;
   computed_at: unknown;
   created_at: unknown;
 };
 
 const TRAINER_COLUMNS =
-  "github_username, github_id, avatar_url, persona_title, dominant_type, league, clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages, reel_commits, featured_card, featured_at, computed_at, created_at";
+  "github_username, github_id, avatar_url, persona_title, dominant_type, league, clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages, reel_commits, featured_card, featured_at, photo_url, photo_data, photo_updated_at, computed_at, created_at";
 
 function asNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -138,8 +150,31 @@ function mapTrainer(row: TrainerRecord): TrainerRow {
     reel_commits: parseJsonArray<string>(row.reel_commits),
     featured_card: parseFeaturedCard(row.featured_card),
     featured_at: row.featured_at == null || row.featured_at === "" ? null : asString(row.featured_at),
+    photo_url: row.photo_url == null || row.photo_url === "" ? null : asString(row.photo_url),
+    photo_data: row.photo_data == null || row.photo_data === "" ? null : asString(row.photo_data),
+    photo_updated_at:
+      row.photo_updated_at == null || row.photo_updated_at === ""
+        ? null
+        : asString(row.photo_updated_at),
     computed_at: asString(row.computed_at),
     created_at: asString(row.created_at),
+  };
+}
+
+/** Prefer mugshot URL for public UI; never expose photo_data blobs to clients. */
+export function trainerPhotoSrc(trainer: Pick<TrainerRow, "photo_url" | "github_username" | "photo_data">): string | null {
+  if (trainer.photo_url) return trainer.photo_url;
+  if (trainer.photo_data) return `/api/trainer/photo/${encodeURIComponent(trainer.github_username)}`;
+  return null;
+}
+
+/** Public trainer JSON — never includes photo_data blobs. */
+export function toPublicTrainer(trainer: TrainerRow) {
+  const { photo_data: _, ...rest } = trainer;
+  void _;
+  return {
+    ...rest,
+    photo_url: trainerPhotoSrc(trainer),
   };
 }
 
@@ -198,6 +233,9 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
         THEN commitdex_trainers.featured_at
         ELSE excluded.featured_at
       END,
+      photo_url = commitdex_trainers.photo_url,
+      photo_data = commitdex_trainers.photo_data,
+      photo_updated_at = commitdex_trainers.photo_updated_at,
       computed_at = excluded.computed_at`,
     [
       row.github_username,
@@ -231,6 +269,7 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
  * Allot or replace the featured card.
  * - First pull: race-safe insert when featured_card is empty.
  * - Daily re-spin: pass `{ replace: true }` after eligibility checks; overwrites foil + featured_at.
+ * - Never clears photo_url / photo_data / photo_updated_at.
  */
 export async function allotFeaturedCard(
   username: string,
@@ -273,4 +312,49 @@ export async function allotFeaturedCard(
     trainer: saved,
     locked: !options?.replace && saved.featured_card?.original_message !== card.original_message,
   };
+}
+
+export async function setTrainerPhoto(
+  username: string,
+  photo: { photo_url: string; photo_data: string | null; mime: PhotoMime },
+): Promise<TrainerRow> {
+  const handle = username.toLowerCase();
+  const existing = await getTrainer(handle);
+  if (!existing) {
+    throw new Error("Scan this trainer before allotting a specimen.");
+  }
+  if (!existing.featured_card) {
+    throw new Error("Allot a foil before saving a mugshot.");
+  }
+  const now = new Date().toISOString();
+  await query(
+    `UPDATE commitdex_trainers
+     SET photo_url = ?, photo_data = ?, photo_updated_at = ?
+     WHERE github_username = ?`,
+    [photo.photo_url, photo.photo_data, now, handle],
+  );
+  const saved = await getTrainer(handle);
+  if (!saved) {
+    throw new Error("Could not save trainer photo.");
+  }
+  return saved;
+}
+
+export async function clearTrainerPhoto(username: string): Promise<TrainerRow> {
+  const handle = username.toLowerCase();
+  const existing = await getTrainer(handle);
+  if (!existing) {
+    throw new Error("Scan this trainer before allotting a specimen.");
+  }
+  await query(
+    `UPDATE commitdex_trainers
+     SET photo_url = NULL, photo_data = NULL, photo_updated_at = NULL
+     WHERE github_username = ?`,
+    [handle],
+  );
+  const saved = await getTrainer(handle);
+  if (!saved) {
+    throw new Error("Could not clear trainer photo.");
+  }
+  return saved;
 }

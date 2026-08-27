@@ -45,4 +45,5 @@ next-env.d.ts
 /data/*.sqlite
 /data/*.sqlite-journal
 /data/*.sqlite-wal
+/data/photos/
 .wrangler/

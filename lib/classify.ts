@@ -22,7 +22,8 @@ type RawCard = {
 };
 
 export const CARD_NAME_MAX = 13;
-const FLAVOR_MAX = 140;
+/** Soft safety cap against model rambling — UI shows full flavor; never mid-word chop. */
+const FLAVOR_MAX = 320;
 const FLAVOR_FALLBACK = "This species has not been documented.";
 
 export function clampCardName(raw: string): string {
@@ -39,14 +40,23 @@ export function clampCardName(raw: string): string {
 function clampFlavor(raw: string): string {
   const text = raw.replace(/\s+/g, " ").trim();
   if (!text) return FLAVOR_FALLBACK;
+  if (text.length <= FLAVOR_MAX) return text;
 
   const parts =
     text.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((part) => part.trim()).filter(Boolean) ?? [text];
-  const blurb = parts.slice(0, 2).join(" ");
-  if (blurb.length <= FLAVOR_MAX) return blurb;
-  if (parts[0].length <= FLAVOR_MAX) return parts[0];
 
-  const cut = blurb.slice(0, FLAVOR_MAX);
+  // Prefer complete sentences under FLAVOR_MAX (no mid-joke / mid-word cut).
+  let blurb = "";
+  for (const part of parts) {
+    const next = blurb ? `${blurb} ${part}` : part;
+    if (next.length > FLAVOR_MAX) break;
+    blurb = next;
+  }
+
+  if (blurb) return blurb;
+
+  // Single overlong sentence: soft word-boundary trim, then end the thought.
+  const cut = parts[0].slice(0, FLAVOR_MAX);
   const at = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
   const clipped = (at >= 48 ? cut.slice(0, at) : cut).replace(/[,:;]+$/, "").trim();
   if (!clipped) return FLAVOR_FALLBACK;

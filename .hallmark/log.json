@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-08-28",
+    "macrostructure": "Catalogue",
+    "theme": "Terminal",
+    "enrichment": "none",
+    "brief": "Trainer dossier uniform catalogue grid — merge analytics, even gutters, stretch rows"
+  },
+  {
+    "date": "2026-08-28",
+    "macrostructure": "Bento Grid",
+    "theme": "Terminal",
+    "enrichment": "none",
+    "brief": "Trainer dossier /t/[username] — dense game-stats HUD bento"
+  },
+  {
     "date": "2026-08-27",
     "macrostructure": "Workbench",
     "theme": "Terminal",

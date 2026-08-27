@@ -2,7 +2,8 @@
 -- Apply remotely:
 --   npx wrangler d1 create commitdex
 --   npx wrangler d1 execute commitdex --remote --file=d1/schema.sql
--- Existing DBs: also run d1/migrations/0002_featured_card.sql (duplicate column is safe to ignore).
+-- Existing DBs: also run d1/migrations/0002_featured_card.sql and
+-- d1/migrations/0003_trainer_photo.sql (duplicate column is safe to ignore).
 -- Local Next.js (no Cloudflare credentials) uses the same SQL via node:sqlite.
 
 CREATE TABLE IF NOT EXISTS commitdex_trainers (
@@ -23,6 +24,9 @@ CREATE TABLE IF NOT EXISTS commitdex_trainers (
   reel_commits TEXT NOT NULL DEFAULT '[]',
   featured_card TEXT,
   featured_at TEXT,
+  photo_url TEXT,
+  photo_data TEXT,
+  photo_updated_at TEXT,
   computed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );

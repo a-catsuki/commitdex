@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
+import {
+  Bricolage_Grotesque,
+  Chakra_Petch,
+  JetBrains_Mono,
+} from "next/font/google";
+import { AuthProvider } from "@/components/AuthProvider";
 import { BootOverlay } from "@/components/BootOverlay";
 import "./globals.css";
 
@@ -16,6 +21,13 @@ const bricolage = Bricolage_Grotesque({
   display: "swap",
 });
 
+const chakra = Chakra_Petch({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-chakra",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Commitdex: a pokedex for commit messages",
   description:
@@ -26,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${jetbrains.variable} ${bricolage.variable}`}
+      className={`${jetbrains.variable} ${bricolage.variable} ${chakra.variable}`}
       suppressHydrationWarning
     >
       <body suppressHydrationWarning>
@@ -34,7 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {`try{if(!sessionStorage.getItem("commitdex-booted")&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.dataset.boot="pending"}catch(e){}`}
         </Script>
         <BootOverlay />
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

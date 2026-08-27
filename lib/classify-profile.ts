@@ -1,4 +1,5 @@
 import { completeJson } from "./openrouter";
+import { normalizePredictionIcon } from "./prediction-icons";
 import { PROFILE_JSON_HINT, PROFILE_SYSTEM_PROMPT } from "./prompts";
 import { clampStat, isCreatureType, type CardStats, type CreatureType } from "./types";
 import type { Prediction } from "./db";
@@ -23,6 +24,15 @@ type RawProfile = {
   predictions?: unknown;
 };
 
+/** Soft-cap punchlines so chips stay short even if the model runs long. */
+function clipPredictionText(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= 96) return trimmed;
+  const cut = trimmed.slice(0, 96);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 48 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 function normalizePredictions(raw: unknown): Prediction[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -31,8 +41,8 @@ function normalizePredictions(raw: unknown): Prediction[] {
       const row = item as { icon?: unknown; text?: unknown };
       if (typeof row.text !== "string" || row.text.trim().length === 0) return null;
       return {
-        icon: typeof row.icon === "string" ? row.icon : "ti-question-mark",
-        text: row.text.trim(),
+        icon: normalizePredictionIcon(row.icon),
+        text: clipPredictionText(row.text),
       };
     })
     .filter((row): row is Prediction => row !== null)

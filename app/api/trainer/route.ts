@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { classifyProfile } from "@/lib/classify-profile";
 import { curateCommits, curateCommitsForSpin } from "@/lib/curate";
-import { getTrainer, upsertTrainer } from "@/lib/db";
+import { getTrainer, toPublicTrainer, upsertTrainer } from "@/lib/db";
 import { fetchGithubUser, fetchPublicCommits, normalizeUsername, type GitHubCommit } from "@/lib/github";
 import { leagueFor } from "@/lib/league";
 import { COPY, jsonError, jsonFromError } from "@/lib/public-error";
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         const reel =
           existing.reel_commits.length > 0 ? existing.reel_commits : existing.sample_messages;
         return NextResponse.json({
-          trainer: existing,
+          trainer: toPublicTrainer(existing),
           cached: true,
           reel,
           locked: true,
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
             : existing.sample_messages;
 
       return NextResponse.json({
-        trainer: existing,
+        trainer: toPublicTrainer(existing),
         cached: true,
         reel: reel.length > 0 ? reel : existing.sample_messages,
         ...flags,
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({
-      trainer,
+      trainer: toPublicTrainer(trainer),
       cached: false,
       reel: trainer.reel_commits,
       ...flags,

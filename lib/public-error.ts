@@ -34,6 +34,19 @@ export const COPY = {
   gibberish: "The classifier mumbled. Print again.",
   reelJam: "The reel jammed. Try again in a minute.",
   network: "The pokedex jammed. Try again in a minute.",
+  tooManyPhotos: "Too many mugshots. Wait a bit.",
+  noFoilForPhoto: "Allot a foil before snapping a mugshot.",
+  photoTooLarge: "That frame is too heavy. Snap again under 300KB.",
+  photoBadType: "Only JPEG or WebP mugshots, trainer.",
+  photoRejected:
+    "Dex scrubbed that frame. Keep it rated for the holding cell, then snap again.",
+  photoOffline: "Mugshot bay is offline. Try again later.",
+  cameraDenied: "Camera stayed dark. Allow access, or skip the booth.",
+  insecureOrigin: "Webcam needs HTTPS or localhost. Skip the booth for now.",
+  verifyGithub: "Verify with GitHub to add a mugshot.",
+  photoWrongAccount:
+    "Mugshot bay is locked to this trainer's GitHub. Sign in as the matching account.",
+  photoUnauthorized: "Verify with GitHub before filing a mugshot.",
 } as const;
 
 function detailOf(error: unknown): string {
@@ -84,6 +97,16 @@ export function toPublicError(error: unknown, kind: ErrorKind): PublicError {
     )
   ) {
     return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.gibberish };
+  }
+
+  if (/Allot a foil before|mugshot/i.test(detail)) {
+    return { status: 400, message: COPY.noFoilForPhoto };
+  }
+  if (/Photo is too large|too large or empty/i.test(detail)) {
+    return { status: 400, message: COPY.photoTooLarge };
+  }
+  if (/Could not store trainer photo|Could not save trainer photo|Could not clear trainer photo/i.test(detail)) {
+    return { status: 503, message: COPY.photoOffline };
   }
 
   return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.jam };
