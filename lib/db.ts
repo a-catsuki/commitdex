@@ -185,12 +185,7 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
         ELSE excluded.predictions
       END,
       sample_messages = excluded.sample_messages,
-      reel_commits = CASE
-        WHEN commitdex_trainers.featured_card IS NOT NULL
-          AND commitdex_trainers.featured_card != ''
-        THEN commitdex_trainers.reel_commits
-        ELSE excluded.reel_commits
-      END,
+      reel_commits = excluded.reel_commits,
       featured_card = CASE
         WHEN commitdex_trainers.featured_card IS NOT NULL
           AND commitdex_trainers.featured_card != ''
@@ -232,33 +227,50 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
   return saved;
 }
 
-/** First successful allotment only. Later calls leave the locked card in place. */
+/**
+ * Allot or replace the featured card.
+ * - First pull: race-safe insert when featured_card is empty.
+ * - Daily re-spin: pass `{ replace: true }` after eligibility checks; overwrites foil + featured_at.
+ */
 export async function allotFeaturedCard(
   username: string,
   card: CreatureCard,
   reel: string[],
+  options?: { replace?: boolean },
 ): Promise<{ trainer: TrainerRow; locked: boolean }> {
   const handle = username.toLowerCase();
   const existing = await getTrainer(handle);
   if (!existing) {
     throw new Error("Scan this trainer before allotting a specimen.");
   }
-  if (existing.featured_card) {
+  if (existing.featured_card && !options?.replace) {
     return { trainer: existing, locked: true };
   }
 
   const now = new Date().toISOString();
-  await query(
-    `UPDATE commitdex_trainers
-     SET featured_card = ?, featured_at = ?, reel_commits = ?
-     WHERE github_username = ?
-       AND (featured_card IS NULL OR featured_card = '')`,
-    [JSON.stringify(card), now, JSON.stringify(reel), handle],
-  );
+  if (options?.replace) {
+    await query(
+      `UPDATE commitdex_trainers
+       SET featured_card = ?, featured_at = ?, reel_commits = ?
+       WHERE github_username = ?`,
+      [JSON.stringify(card), now, JSON.stringify(reel), handle],
+    );
+  } else {
+    await query(
+      `UPDATE commitdex_trainers
+       SET featured_card = ?, featured_at = ?, reel_commits = ?
+       WHERE github_username = ?
+         AND (featured_card IS NULL OR featured_card = '')`,
+      [JSON.stringify(card), now, JSON.stringify(reel), handle],
+    );
+  }
 
   const saved = await getTrainer(handle);
   if (!saved) {
     throw new Error("Could not save the allotted card.");
   }
-  return { trainer: saved, locked: saved.featured_card?.original_message !== card.original_message };
+  return {
+    trainer: saved,
+    locked: !options?.replace && saved.featured_card?.original_message !== card.original_message,
+  };
 }

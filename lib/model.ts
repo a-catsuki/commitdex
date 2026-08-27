@@ -1,12 +1,30 @@
 /** Code default: DeepSeek V4 Flash (instruct). Env may override. */
 export const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 
-export const OPENROUTER_MODEL =
-  process.env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL;
+/**
+ * Resolve a model id from env. Rejects empty values, bare names without a
+ * provider slash, and accidental `OPENROUTER_MODEL=OPENROUTER_MODEL` pollution.
+ */
+function resolveModelId(raw: string | undefined, fallback: string): string {
+  const id = raw?.trim() ?? "";
+  if (!id) return fallback;
+  if (id === "OPENROUTER_MODEL" || id === "OPENROUTER_CLASSIFY_MODEL") {
+    return fallback;
+  }
+  if (!id.includes("/")) return fallback;
+  return id;
+}
+
+export const OPENROUTER_MODEL = resolveModelId(
+  process.env.OPENROUTER_MODEL,
+  DEFAULT_OPENROUTER_MODEL,
+);
 
 /** Optional pin for classify only; otherwise same as OPENROUTER_MODEL. */
-export const CLASSIFY_MODEL =
-  process.env.OPENROUTER_CLASSIFY_MODEL?.trim() || OPENROUTER_MODEL;
+export const CLASSIFY_MODEL = resolveModelId(
+  process.env.OPENROUTER_CLASSIFY_MODEL,
+  OPENROUTER_MODEL,
+);
 
 const SAFETY_MODEL =
   /content[-_]?safety|llama-guard|prompt-guard|moderation|shield[-_]?gemma|nemotron[-_].*safety|safety[-_]?model/i;

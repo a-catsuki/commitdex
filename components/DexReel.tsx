@@ -22,7 +22,12 @@ type Motion = "rest" | "race" | "settle";
 type Props = {
   username: string;
   reel: string[];
+  /** When set, reel starts printed on this foil (locked view). */
   lockedCard?: CardData | null;
+  /** First allotment vs a new UTC-day re-pull. */
+  mode?: "first" | "respin";
+  /** Shown under a locked foil instead of a fake crank. */
+  lockReason?: string | null;
 };
 
 function sleep(ms: number) {
@@ -49,7 +54,13 @@ function parkOffset(reelItems: string[], lockedMessage?: string | null) {
   return reelItems.length;
 }
 
-export function DexReel({ username, reel, lockedCard = null }: Props) {
+export function DexReel({
+  username,
+  reel,
+  lockedCard = null,
+  mode = "first",
+  lockReason = null,
+}: Props) {
   const router = useRouter();
   const stripRef = useRef<HTMLUListElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -57,7 +68,7 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
   const [phase, setPhase] = useState<Phase>(lockedCard ? "printed" : "ready");
   const [card, setCard] = useState<CardData | null>(lockedCard);
   const [landed, setLanded] = useState(lockedCard?.original_message ?? reel[0] ?? "");
-  const [error, setError] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>(lockReason ?? undefined);
   const [reduced, setReduced] = useState(false);
   const [offset, setOffset] = useState(() => parkOffset(reel, lockedCard?.original_message));
   const [motion, setMotion] = useState<Motion>("rest");
@@ -67,6 +78,9 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
     const idx = reel.findIndex((m) => m === lockedCard.original_message);
     return idx >= 0 ? reel.length + idx : null;
   });
+
+  const lockedView = Boolean(lockedCard) && phase === "printed";
+  const canCrank = !lockedView && phase !== "spinning" && !card;
 
   const strip = useMemo(() => {
     if (reel.length === 0) return [];
@@ -118,7 +132,7 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
   }, [tickets.length]);
 
   async function crank() {
-    if (phase === "spinning" || card) return;
+    if (!canCrank) return;
     const motionOff = prefersReducedMotion();
     setReduced(motionOff);
     setPhase("spinning");
@@ -141,6 +155,7 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
         card?: CardData;
         landed?: string;
         locked?: boolean;
+        spinLockedReason?: string | null;
       };
       if (!response.ok) {
         setMotion("rest");
@@ -150,6 +165,19 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
             ? payload.error
             : "The reel jammed. Try again in a minute.",
         );
+        return;
+      }
+      if (payload.locked && payload.spinLockedReason) {
+        setMotion("rest");
+        setOffset(parkOffset(reel, payload.card?.original_message));
+        if (payload.card) {
+          setCard(payload.card);
+          setLanded(payload.card.original_message);
+          setPhase("printed");
+        } else {
+          setPhase("error");
+        }
+        setError(payload.spinLockedReason);
         return;
       }
       if (!payload.card || !payload.landed) {
@@ -213,9 +241,13 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
     <section className="dex-reel" data-state={phase} aria-label="Specimen reel">
       <header className="dex-reel__head">
         <p className="dex-reel__kicker">dex reel</p>
-        <h2 className="dex-reel__title">Allot one specimen</h2>
+        <h2 className="dex-reel__title">
+          {mode === "respin" ? "Pull a new specimen" : "Allot one specimen"}
+        </h2>
         <p className="dex-reel__lede">
-          Curated from @{username}&apos;s public log. First allotment locks on the trainer poster.
+          {mode === "respin"
+            ? `New UTC day and fresh public commits since last pull. Crank to replace @${username}'s foil on Most Wanted.`
+            : `Curated from @${username}'s public log. One pull per UTC day; re-spin needs newer commits.`}
         </p>
       </header>
 
@@ -276,11 +308,11 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
             type="button"
             className="btn"
             onClick={() => void crank()}
-            disabled={busy || reel.length === 0}
+            disabled={busy || reel.length === 0 || !canCrank}
             aria-busy={busy}
             data-state={busy ? "loading" : error ? "error" : "idle"}
           >
-            {busy ? "cranking reel" : "crank the reel"}
+            {busy ? "cranking reel" : mode === "respin" ? "crank for a new pull" : "crank the reel"}
           </button>
           {error ? (
             <p className="prompt__error" role="alert">
@@ -290,13 +322,21 @@ export function DexReel({ username, reel, lockedCard = null }: Props) {
         </div>
       ) : card ? (
         <div className="dex-reel__print">
+          {lockReason || error ? (
+            <p className="dex-reel__lock" role="status">
+              {lockReason ?? error}
+            </p>
+          ) : null}
           <CardPack reduced={reduced}>
             <CreatureCard card={card} />
           </CardPack>
           <button
             type="button"
             className="btn"
-            onClick={() => router.push(`/t/${username}`)}
+            onClick={() => {
+              router.push(`/t/${username}`);
+              router.refresh();
+            }}
           >
             open dossier
           </button>

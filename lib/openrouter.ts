@@ -16,6 +16,9 @@ const BUSY_ERROR =
 const KEY_LIMIT_ERROR =
   "OpenRouter key limit exceeded. Add credits or raise the key limit, then retry.";
 
+const BAD_MODEL_ERROR =
+  "OpenRouter model id is invalid. Set OPENROUTER_MODEL to a real catalog id.";
+
 const TIMEOUT_ERROR = "The classifier timed out. Retry the scan.";
 
 type ChatChoice = {
@@ -112,6 +115,9 @@ async function chatOnce(
       if (/key limit exceeded/i.test(errMsg)) {
         throw new Error(KEY_LIMIT_ERROR);
       }
+      if (/not a valid model/i.test(errMsg) || response.status === 404) {
+        throw new Error(BAD_MODEL_ERROR);
+      }
       if (response.status === 429 || /provider returned error/i.test(errMsg)) {
         throw new Error(BUSY_ERROR);
       }
@@ -121,6 +127,9 @@ async function chatOnce(
       console.error("[commitdex:openrouter]", data.error);
       if (/key limit exceeded/i.test(errMsg)) {
         throw new Error(KEY_LIMIT_ERROR);
+      }
+      if (/not a valid model/i.test(errMsg)) {
+        throw new Error(BAD_MODEL_ERROR);
       }
       throw new Error(BUSY_ERROR);
     }
@@ -143,7 +152,11 @@ type CompleteOptions = {
   /** Single model id. Defaults to OPENROUTER_MODEL. */
   model?: string;
   timeoutMs?: number;
-  /** Cap hidden reasoning so JSON still fits in max_tokens. */
+  /**
+   * Optional OpenRouter reasoning controls. Avoid with DeepSeek V4 Flash:
+   * `exclude: true` often returns null content while burning max_tokens on
+   * hidden reasoning. Prefer omitting this field.
+   */
   reasoningMaxTokens?: number;
 };
 

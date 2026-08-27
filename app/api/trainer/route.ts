@@ -1,16 +1,30 @@
 import { NextResponse } from "next/server";
 import { classifyProfile } from "@/lib/classify-profile";
-import { curateCommits } from "@/lib/curate";
+import { curateCommits, curateCommitsForSpin } from "@/lib/curate";
 import { getTrainer, upsertTrainer } from "@/lib/db";
-import { fetchGithubUser, fetchPublicCommits, normalizeUsername } from "@/lib/github";
+import { fetchGithubUser, fetchPublicCommits, normalizeUsername, type GitHubCommit } from "@/lib/github";
 import { leagueFor } from "@/lib/league";
 import { COPY, jsonError, jsonFromError } from "@/lib/public-error";
 import { clientKey, rateLimited } from "@/lib/rate-limit";
+import { evaluateSpinEligibility, isNewUtcDaySince } from "@/lib/spin-eligibility";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const CACHE_MS = 24 * 60 * 60 * 1000;
+
+function spinFlagsForTrainer(
+  featuredCard: boolean,
+  featuredAt: string | null,
+  commits: GitHubCommit[] | null,
+) {
+  const eligibility = evaluateSpinEligibility(featuredAt, featuredCard, commits);
+  return {
+    canSpin: eligibility.canSpin,
+    spinLockedReason: eligibility.spinLockedReason,
+    locked: featuredCard && !eligibility.canSpin,
+  };
+}
 
 export async function POST(request: Request) {
   if (rateLimited(`trainer:${clientKey(request)}`, 6, 10 * 60 * 1000)) {
@@ -41,12 +55,46 @@ export async function POST(request: Request) {
     const existing = await getTrainer(username);
     const fresh =
       existing && Date.now() - new Date(existing.computed_at).getTime() < CACHE_MS;
+
     if (existing && fresh) {
+      let commits: GitHubCommit[] | null = null;
+      const hasFoil = Boolean(existing.featured_card);
+
+      // Same UTC day: no GitHub call. New day with foil: fetch to check newer commits.
+      if (hasFoil && existing.featured_at && !isNewUtcDaySince(existing.featured_at)) {
+        const reel =
+          existing.reel_commits.length > 0 ? existing.reel_commits : existing.sample_messages;
+        return NextResponse.json({
+          trainer: existing,
+          cached: true,
+          reel,
+          locked: true,
+          canSpin: false,
+          spinLockedReason: COPY.alreadyPulledToday,
+        });
+      }
+
+      if (hasFoil) {
+        try {
+          commits = await fetchPublicCommits(existing.github_username, 100);
+        } catch {
+          commits = null;
+        }
+      }
+
+      const flags = spinFlagsForTrainer(hasFoil, existing.featured_at, commits);
+      const reel =
+        commits && hasFoil
+          ? curateCommitsForSpin(commits, existing.featured_at)
+          : existing.reel_commits.length > 0
+            ? existing.reel_commits
+            : existing.sample_messages;
+
       return NextResponse.json({
         trainer: existing,
         cached: true,
-        reel: existing.reel_commits.length > 0 ? existing.reel_commits : existing.sample_messages,
-        locked: Boolean(existing.featured_card),
+        reel: reel.length > 0 ? reel : existing.sample_messages,
+        ...flags,
       });
     }
 
@@ -57,7 +105,10 @@ export async function POST(request: Request) {
     const predictions =
       existing && existing.predictions.length > 0 ? existing.predictions : draft.predictions;
     const messages = commits.map((c) => c.message);
-    const reel = curateCommits(messages);
+    const hasFoil = Boolean(existing?.featured_card);
+    const reel = hasFoil
+      ? curateCommitsForSpin(commits, existing?.featured_at)
+      : curateCommits(messages);
 
     const trainer = await upsertTrainer({
       github_username: user.login.toLowerCase(),
@@ -79,11 +130,17 @@ export async function POST(request: Request) {
       computed_at: now,
     });
 
+    const flags = spinFlagsForTrainer(
+      Boolean(trainer.featured_card),
+      trainer.featured_at,
+      commits,
+    );
+
     return NextResponse.json({
       trainer,
       cached: false,
       reel: trainer.reel_commits,
-      locked: Boolean(trainer.featured_card),
+      ...flags,
     });
   } catch (error) {
     return jsonFromError(error, "trainer");

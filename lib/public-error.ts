@@ -20,13 +20,18 @@ export const COPY = {
   noCommits: "No public commit messages on file for that trainer.",
   scanFirst: "Scan this trainer before cranking the reel.",
   emptyReel: "The reel is empty. Scan this trainer again.",
+  alreadyPulledToday: "Already pulled today.",
+  noNewSpecimens: "No new specimens since last pull.",
   githubBusy: "GitHub is catching its breath. Wait a minute, then scan again.",
   classifyOffline: "Classifier is offline. Try again later.",
   openRouterCredits:
     "OpenRouter is out of credits for this key. Add funds or raise the key limit, then retry.",
+  badModel:
+    "Classifier model is misconfigured. Set OPENROUTER_MODEL to a real OpenRouter id (e.g. deepseek/deepseek-v4-flash), then restart.",
   archiveOffline: "Trainer archive is offline. Try again later.",
   wantedOffline: "Most Wanted is offline. Try again in a minute.",
   jam: "The pokedex jammed. Try again in a minute.",
+  gibberish: "The classifier mumbled. Print again.",
   reelJam: "The reel jammed. Try again in a minute.",
   network: "The pokedex jammed. Try again in a minute.",
 } as const;
@@ -47,6 +52,9 @@ export function toPublicError(error: unknown, kind: ErrorKind): PublicError {
   }
   if (/key limit exceeded|out of credits/i.test(detail)) {
     return { status: 402, message: COPY.openRouterCredits };
+  }
+  if (/model id is invalid|not a valid model|OPENROUTER_MODEL/i.test(detail)) {
+    return { status: 503, message: COPY.badModel };
   }
   if (
     /D1 is not configured|Could not query D1|SQLITE|EACCES|EPERM|not writable|archive is offline/i.test(
@@ -75,7 +83,7 @@ export function toPublicError(error: unknown, kind: ErrorKind): PublicError {
       detail,
     )
   ) {
-    return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.jam };
+    return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.gibberish };
   }
 
   return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.jam };

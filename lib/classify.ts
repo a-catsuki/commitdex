@@ -90,7 +90,8 @@ export async function classifyCommit(message: string): Promise<CreatureCard> {
     temperature: 1.05,
     model: CLASSIFY_MODEL,
     timeoutMs: CLASSIFY_TIMEOUT_MS,
-    reasoningMaxTokens: 48,
+    // Do not send OpenRouter `reasoning` for DeepSeek V4 Flash: exclude/max
+    // burns completion budget into hidden tokens and returns empty content.
   });
 
   return normalizeCard(parsed as RawCard, message, model);

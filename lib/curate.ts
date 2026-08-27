@@ -1,3 +1,4 @@
+import type { GitHubCommit } from "./github";
 import type { CreatureType, Rarity } from "./types";
 
 const GENERIC_LEAD =
@@ -43,6 +44,56 @@ export function curateCommits(messages: string[], want = 7): string[] {
 
   const target = Math.min(8, Math.max(Math.min(5, ranked.length), Math.min(want, ranked.length)));
   return ranked.slice(0, target);
+}
+
+/**
+ * Prefer commits newer than `afterIso` for the reel; fill with distinctive older
+ * history so the visual strip still has personality.
+ */
+export function curateCommitsForSpin(
+  commits: GitHubCommit[],
+  afterIso?: string | null,
+  want = 7,
+): string[] {
+  if (!afterIso) {
+    return curateCommits(
+      commits.map((c) => c.message),
+      want,
+    );
+  }
+
+  const pivot = new Date(afterIso).getTime();
+  if (Number.isNaN(pivot)) {
+    return curateCommits(
+      commits.map((c) => c.message),
+      want,
+    );
+  }
+
+  const newer: string[] = [];
+  const older: string[] = [];
+  for (const commit of commits) {
+    const at = new Date(commit.committedAt).getTime();
+    if (!Number.isNaN(at) && at > pivot) newer.push(commit.message);
+    else older.push(commit.message);
+  }
+
+  const preferred = curateCommits(newer, want);
+  if (preferred.length >= Math.min(5, want) || older.length === 0) {
+    return preferred.length > 0 ? preferred : curateCommits(older, want);
+  }
+
+  const filler = curateCommits(older, want);
+  const seen = new Set(preferred.map((m) => m.toLowerCase()));
+  const mixed = [...preferred];
+  for (const message of filler) {
+    if (mixed.length >= want) break;
+    const key = message.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    mixed.push(message);
+  }
+  return mixed;
 }
 
 export function reelLabel(message: string, max = 42): string {

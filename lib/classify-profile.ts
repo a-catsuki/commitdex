@@ -79,7 +79,6 @@ export async function classifyProfile(commits: GitHubCommit[]): Promise<ProfileD
     ].join("\n\n"),
     maxTokens: 1200,
     temperature: 0.95,
-    reasoningMaxTokens: 96,
   });
 
   return normalizeProfile(parsed as RawProfile);

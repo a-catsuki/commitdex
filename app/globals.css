@@ -1508,6 +1508,12 @@ a {
   overflow-wrap: anywhere;
 }
 
+.dex-reel__lock {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+}
+
 .dex-reel__actions,
 .dex-reel__print {
   display: grid;

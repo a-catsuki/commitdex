@@ -13,6 +13,8 @@ type ScanPayload = {
   trainer?: { github_username: string; featured_card?: CreatureCard | null };
   reel?: string[];
   locked?: boolean;
+  canSpin?: boolean;
+  spinLockedReason?: string | null;
 };
 
 export function TrainerScan() {
@@ -24,6 +26,7 @@ export function TrainerScan() {
   const [handle, setHandle] = useState<string | null>(null);
   const [reel, setReel] = useState<string[]>([]);
   const [featured, setFeatured] = useState<CreatureCard | null>(null);
+  const [canSpin, setCanSpin] = useState(false);
 
   useEffect(() => {
     if (status !== "loading") return;
@@ -42,6 +45,7 @@ export function TrainerScan() {
     setHandle(null);
     setReel([]);
     setFeatured(null);
+    setCanSpin(false);
     try {
       const response = await fetch("/api/trainer", {
         method: "POST",
@@ -51,15 +55,23 @@ export function TrainerScan() {
       const payload = (await response.json().catch(() => ({}))) as ScanPayload;
       if (!response.ok) {
         setStatus("error");
-        setError(typeof payload.error === "string" && payload.error ? payload.error : "The pokedex jammed. Try again in a minute.");
+        setError(
+          typeof payload.error === "string" && payload.error
+            ? payload.error
+            : "The pokedex jammed. Try again in a minute.",
+        );
         return;
       }
       const nextHandle = payload.trainer?.github_username ?? trimmed.toLowerCase();
+      const nextFeatured = payload.trainer?.featured_card ?? null;
+      const nextCanSpin = payload.canSpin ?? !nextFeatured;
       setHandle(nextHandle);
       setReel(payload.reel ?? []);
-      setFeatured(payload.trainer?.featured_card ?? null);
+      setFeatured(nextFeatured);
+      setCanSpin(nextCanSpin);
       setStatus("success");
-      if (payload.locked && payload.trainer?.featured_card) {
+      // Locked foil: skip reel, open dossier (reason lives on the poster).
+      if (nextFeatured && !nextCanSpin) {
         router.push(`/t/${nextHandle}`);
       }
     } catch {
@@ -70,6 +82,7 @@ export function TrainerScan() {
 
   const busy = status === "loading";
   const empty = username.trim().length === 0;
+  const showReel = status === "success" && handle && reel.length > 0 && canSpin;
 
   return (
     <section className="hunt" id="scan">
@@ -128,8 +141,12 @@ export function TrainerScan() {
           </p>
         ) : null}
       </form>
-      {status === "success" && handle && !featured && reel.length > 0 ? (
-        <DexReel username={handle} reel={reel} />
+      {showReel ? (
+        <DexReel
+          username={handle}
+          reel={reel}
+          mode={featured ? "respin" : "first"}
+        />
       ) : null}
     </section>
   );

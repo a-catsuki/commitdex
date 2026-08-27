@@ -8,8 +8,12 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { TrainerScan } from "@/components/TrainerScan";
 import { TypeChip } from "@/components/TypeChip";
+import { curateCommitsForSpin } from "@/lib/curate";
 import { getTrainer } from "@/lib/db";
+import { fetchPublicCommits } from "@/lib/github";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
+import { COPY } from "@/lib/public-error";
+import { evaluateSpinEligibility, isNewUtcDaySince } from "@/lib/spin-eligibility";
 import { TYPE_META } from "@/lib/type-meta";
 import { isCreatureType } from "@/lib/types";
 
@@ -46,8 +50,30 @@ export default async function TrainerPage({ params }: PageProps) {
   if (!trainer) notFound();
 
   const type = isCreatureType(trainer.dominant_type) ? trainer.dominant_type : "chaotic";
-  const reel =
+  let reel =
     trainer.reel_commits.length > 0 ? trainer.reel_commits : trainer.sample_messages;
+  let canSpin = !trainer.featured_card;
+  let spinLockedReason: string | null = null;
+
+  if (trainer.featured_card) {
+    if (!trainer.featured_at || !isNewUtcDaySince(trainer.featured_at)) {
+      canSpin = false;
+      spinLockedReason = COPY.alreadyPulledToday;
+    } else {
+      try {
+        const commits = await fetchPublicCommits(trainer.github_username, 100);
+        const eligibility = evaluateSpinEligibility(trainer.featured_at, true, commits);
+        canSpin = eligibility.canSpin;
+        spinLockedReason = eligibility.spinLockedReason;
+        const curated = curateCommitsForSpin(commits, trainer.featured_at);
+        if (curated.length > 0) reel = curated;
+      } catch {
+        canSpin = false;
+        spinLockedReason = COPY.noNewSpecimens;
+      }
+    }
+  }
+
   const stats = [
     ["clarity", trainer.clarity],
     ["effort", trainer.effort],
@@ -89,16 +115,19 @@ export default async function TrainerPage({ params }: PageProps) {
           </div>
         </header>
 
-        {trainer.featured_card ? (
+        {trainer.featured_card && canSpin && reel.length > 0 ? (
+          <DexReel username={trainer.github_username} reel={reel} mode="respin" />
+        ) : trainer.featured_card ? (
           <section className="dossier__foil">
             <h2>Allotted specimen</h2>
             <p className="dossier__note">
-              Locked on first reel so this trainer keeps one face on Most Wanted.
+              {spinLockedReason ??
+                "One foil per UTC day. Fresh public commits unlock tomorrow's crank."}
             </p>
             <CreatureCard card={trainer.featured_card} />
           </section>
         ) : reel.length > 0 ? (
-          <DexReel username={trainer.github_username} reel={reel} />
+          <DexReel username={trainer.github_username} reel={reel} mode="first" />
         ) : null}
 
         <dl className="dossier__stats" data-type={type}>
