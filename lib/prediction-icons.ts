@@ -62,12 +62,18 @@ export const PREDICTION_ICONS = [
   },
 ] as const satisfies readonly PredictionIconMeta[];
 
-export const DEFAULT_PREDICTION_ICON = "ti-bolt";
+export type PredictionIcon = (typeof PREDICTION_ICONS)[number]["icon"];
+
+export const DEFAULT_PREDICTION_ICON: PredictionIcon = "ti-bolt";
 export const DEFAULT_PREDICTION_LABEL = "FIELD NOTE";
 
-const ICON_BY_SLUG = new Map(
-  PREDICTION_ICONS.map((row) => [row.icon, row] as const),
+const ICON_BY_SLUG = new Map<string, (typeof PREDICTION_ICONS)[number]>(
+  PREDICTION_ICONS.map((row) => [row.icon, row]),
 );
+
+function isPredictionIcon(slug: string): slug is PredictionIcon {
+  return ICON_BY_SLUG.has(slug);
+}
 
 /** Prompt fragment listing allowlisted icons + meanings. */
 export function predictionIconPromptList(): string {
@@ -76,13 +82,13 @@ export function predictionIconPromptList(): string {
   );
 }
 
-export function normalizePredictionIcon(raw: unknown): string {
+export function normalizePredictionIcon(raw: unknown): PredictionIcon {
   if (typeof raw !== "string") return DEFAULT_PREDICTION_ICON;
   const slug = raw.trim().toLowerCase();
-  if (ICON_BY_SLUG.has(slug)) return slug;
+  if (isPredictionIcon(slug)) return slug;
   // Accept bare names the model sometimes returns ("coffee", "moon").
   const withPrefix = slug.startsWith("ti-") ? slug : `ti-${slug}`;
-  if (ICON_BY_SLUG.has(withPrefix)) return withPrefix;
+  if (isPredictionIcon(withPrefix)) return withPrefix;
   return DEFAULT_PREDICTION_ICON;
 }
 

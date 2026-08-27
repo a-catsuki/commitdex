@@ -1,6 +1,7 @@
 import { query } from "./d1";
 import type { League } from "./league";
 import type { PhotoMime } from "./photo-store";
+import type { PredictionIcon } from "./prediction-icons";
 import {
   clampStat,
   isCreatureType,
@@ -10,7 +11,7 @@ import {
 } from "./types";
 
 export type Prediction = {
-  icon: string;
+  icon: PredictionIcon;
   text: string;
 };
 
