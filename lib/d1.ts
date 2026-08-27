@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { splitSqlStatements, TRAINER_SCHEMA_SQL } from "./sql";
+import {
+  isDuplicateColumnError,
+  splitSqlStatements,
+  TRAINER_ALTER_SQL,
+  TRAINER_SCHEMA_SQL,
+} from "./sql";
 
 type D1QueryResponse = {
   success?: boolean;
@@ -64,9 +69,7 @@ function requireRemote(): { accountId: string; token: string; databaseId: string
   const token = d1Token();
   const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim();
   if (!accountId || !token || !databaseId) {
-    throw new Error(
-      "Cloudflare D1 is not configured. Add CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN (or CLOUDFLARE_D1_TOKEN), and CLOUDFLARE_D1_DATABASE_ID, or use the local SQLite fallback.",
-    );
+    throw new Error("D1 is not configured.");
   }
   return { accountId, token, databaseId };
 }
@@ -85,13 +88,19 @@ async function d1Http(sql: string, params: unknown[] = []): Promise<Record<strin
     },
   );
   const payload = (await response.json().catch(() => ({}))) as D1QueryResponse;
+  const blob = JSON.stringify(payload);
+  if (/duplicate column/i.test(blob)) {
+    return [];
+  }
   if (!response.ok || payload.success === false) {
     const detail = payload.errors?.[0]?.message ?? `D1 HTTP ${response.status}`;
-    throw new Error(`Could not query D1: ${detail}`);
+    console.error("[commitdex:d1]", detail);
+    throw new Error("Could not query D1.");
   }
   const batch = payload.result?.[0];
   if (batch && batch.success === false) {
-    throw new Error("Could not query D1: statement failed.");
+    console.error("[commitdex:d1]", "statement failed");
+    throw new Error("Could not query D1.");
   }
   return batch?.results ?? [];
 }
@@ -120,17 +129,40 @@ function runLocal(sql: string, params: unknown[] = []): Record<string, unknown>[
   return [];
 }
 
+async function runSchemaStatement(sql: string): Promise<void> {
+  try {
+    if (isRemoteD1Configured()) {
+      await d1Http(sql);
+      return;
+    }
+    openLocal().exec(sql);
+  } catch (error) {
+    if (isDuplicateColumnError(error)) return;
+    throw error;
+  }
+}
+
 function ensureLocalSchema(): void {
   const db = openLocal();
   for (const sql of splitSqlStatements(TRAINER_SCHEMA_SQL)) {
     db.exec(sql);
+  }
+  for (const sql of splitSqlStatements(TRAINER_ALTER_SQL)) {
+    try {
+      db.exec(sql);
+    } catch (error) {
+      if (!isDuplicateColumnError(error)) throw error;
+    }
   }
 }
 
 async function ensureSchema(): Promise<void> {
   if (isRemoteD1Configured()) {
     for (const sql of splitSqlStatements(TRAINER_SCHEMA_SQL)) {
-      await d1Http(sql);
+      await runSchemaStatement(sql);
+    }
+    for (const sql of splitSqlStatements(TRAINER_ALTER_SQL)) {
+      await runSchemaStatement(sql);
     }
     return;
   }

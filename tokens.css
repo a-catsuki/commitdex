@@ -81,9 +81,15 @@
   --dur-micro: 120ms;
   --dur-short: 220ms;
   --dur-long: 420ms;
-  --dur-pack: 900ms;
-  --dur-feed: 1400ms;
-  --dur-scan: 1100ms;
+  --dur-pack: 880ms;
+  --dur-feed: 1800ms;
+  --dur-scan: 1600ms;
+  --dur-spark: 1200ms;
+  --dur-reel: 2600ms;
+  --ticket-w: clamp(7.25rem, 38vw, 9.25rem);
+  --ticket-gap: 0.5rem;
+  --ticket-stride: calc(var(--ticket-w) + var(--ticket-gap));
+  --ease-reel: cubic-bezier(0.08, 0.82, 0.08, 1);
 
   --z-base: 1;
   --z-raised: 10;

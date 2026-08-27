@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DexReel } from "@/components/DexReel";
+import { CreatureCard } from "@/components/CreatureCard";
 import { LeagueBadge } from "@/components/LeagueBadge";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
@@ -10,6 +12,8 @@ import { getTrainer } from "@/lib/db";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
 import { TYPE_META } from "@/lib/type-meta";
 import { isCreatureType } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ username: string }>;
@@ -42,6 +46,8 @@ export default async function TrainerPage({ params }: PageProps) {
   if (!trainer) notFound();
 
   const type = isCreatureType(trainer.dominant_type) ? trainer.dominant_type : "chaotic";
+  const reel =
+    trainer.reel_commits.length > 0 ? trainer.reel_commits : trainer.sample_messages;
   const stats = [
     ["clarity", trainer.clarity],
     ["effort", trainer.effort],
@@ -82,6 +88,18 @@ export default async function TrainerPage({ params }: PageProps) {
             </p>
           </div>
         </header>
+
+        {trainer.featured_card ? (
+          <section className="dossier__foil">
+            <h2>Allotted specimen</h2>
+            <p className="dossier__note">
+              Locked on first reel so this trainer keeps one face on Most Wanted.
+            </p>
+            <CreatureCard card={trainer.featured_card} />
+          </section>
+        ) : reel.length > 0 ? (
+          <DexReel username={trainer.github_username} reel={reel} />
+        ) : null}
 
         <dl className="dossier__stats" data-type={type}>
           {stats.map(([label, value]) => (

@@ -26,9 +26,17 @@ export function PrintBay({ stage, reduced }: Props) {
       aria-live="polite"
       aria-busy="true"
     >
-      <p className="print-bay__kicker">{stage.kicker}</p>
-      <p className="print-bay__title">{stage.title}</p>
-      <p className="print-bay__detail">{stage.detail}</p>
+      <div className="print-bay__copy">
+        <p className="print-bay__kicker" key={stage.kicker}>
+          {stage.kicker}
+        </p>
+        <p className="print-bay__title" key={stage.title}>
+          {stage.title}
+        </p>
+        <p className="print-bay__detail" key={stage.detail}>
+          {stage.detail}
+        </p>
+      </div>
 
       <div className="print-bay__slot" aria-hidden="true">
         <div className="print-bay__head" />

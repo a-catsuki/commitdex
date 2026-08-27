@@ -1,6 +1,12 @@
 import { query } from "./d1";
 import type { League } from "./league";
-import type { CreatureType } from "./types";
+import {
+  clampStat,
+  isCreatureType,
+  isRarity,
+  type CreatureCard,
+  type CreatureType,
+} from "./types";
 
 export type Prediction = {
   icon: string;
@@ -21,6 +27,9 @@ export type TrainerRow = {
   total_commits_analyzed: number;
   predictions: Prediction[];
   sample_messages: string[];
+  reel_commits: string[];
+  featured_card: CreatureCard | null;
+  featured_at: string | null;
   computed_at: string;
   created_at: string;
 };
@@ -41,12 +50,15 @@ type TrainerRecord = {
   total_commits_analyzed: unknown;
   predictions: unknown;
   sample_messages: unknown;
+  reel_commits?: unknown;
+  featured_card?: unknown;
+  featured_at?: unknown;
   computed_at: unknown;
   created_at: unknown;
 };
 
 const TRAINER_COLUMNS =
-  "github_username, github_id, avatar_url, persona_title, dominant_type, league, clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages, computed_at, created_at";
+  "github_username, github_id, avatar_url, persona_title, dominant_type, league, clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages, reel_commits, featured_card, featured_at, computed_at, created_at";
 
 function asNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -72,6 +84,42 @@ function parseJsonArray<T>(value: unknown): T[] {
   return [];
 }
 
+function parseFeaturedCard(value: unknown): CreatureCard | null {
+  if (value == null || value === "") return null;
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const row = parsed as Record<string, unknown>;
+  if (typeof row.name !== "string" || typeof row.type !== "string" || typeof row.rarity !== "string") {
+    return null;
+  }
+  if (!isCreatureType(row.type) || !isRarity(row.rarity)) return null;
+  const stats = (row.stats ?? {}) as Record<string, unknown>;
+  let name = row.name.replace(/\s+/g, "").toLowerCase().slice(0, 13);
+  while (name.endsWith("-")) name = name.slice(0, -1);
+  return {
+    name: name || "missingno",
+    type: row.type,
+    rarity: row.rarity,
+    stats: {
+      clarity: clampStat(stats.clarity),
+      effort: clampStat(stats.effort),
+      honesty: clampStat(stats.honesty),
+      chaos: clampStat(stats.chaos),
+    },
+    flavor_text: typeof row.flavor_text === "string" ? row.flavor_text : "",
+    original_message: typeof row.original_message === "string" ? row.original_message : "",
+    source: "openrouter",
+    model: typeof row.model === "string" ? row.model : "",
+  };
+}
+
 function mapTrainer(row: TrainerRecord): TrainerRow {
   return {
     github_username: asString(row.github_username),
@@ -87,6 +135,9 @@ function mapTrainer(row: TrainerRecord): TrainerRow {
     total_commits_analyzed: asNumber(row.total_commits_analyzed),
     predictions: parseJsonArray<Prediction>(row.predictions),
     sample_messages: parseJsonArray<string>(row.sample_messages),
+    reel_commits: parseJsonArray<string>(row.reel_commits),
+    featured_card: parseFeaturedCard(row.featured_card),
+    featured_at: row.featured_at == null || row.featured_at === "" ? null : asString(row.featured_at),
     computed_at: asString(row.computed_at),
     created_at: asString(row.created_at),
   };
@@ -114,8 +165,8 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
     `INSERT INTO commitdex_trainers (
       github_username, github_id, avatar_url, persona_title, dominant_type, league,
       clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages,
-      computed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      reel_commits, featured_card, featured_at, computed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(github_username) DO UPDATE SET
       github_id = excluded.github_id,
       avatar_url = excluded.avatar_url,
@@ -134,6 +185,24 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
         ELSE excluded.predictions
       END,
       sample_messages = excluded.sample_messages,
+      reel_commits = CASE
+        WHEN commitdex_trainers.featured_card IS NOT NULL
+          AND commitdex_trainers.featured_card != ''
+        THEN commitdex_trainers.reel_commits
+        ELSE excluded.reel_commits
+      END,
+      featured_card = CASE
+        WHEN commitdex_trainers.featured_card IS NOT NULL
+          AND commitdex_trainers.featured_card != ''
+        THEN commitdex_trainers.featured_card
+        ELSE excluded.featured_card
+      END,
+      featured_at = CASE
+        WHEN commitdex_trainers.featured_at IS NOT NULL
+          AND commitdex_trainers.featured_at != ''
+        THEN commitdex_trainers.featured_at
+        ELSE excluded.featured_at
+      END,
       computed_at = excluded.computed_at`,
     [
       row.github_username,
@@ -149,6 +218,9 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
       row.total_commits_analyzed,
       JSON.stringify(row.predictions),
       JSON.stringify(row.sample_messages),
+      JSON.stringify(row.reel_commits),
+      row.featured_card ? JSON.stringify(row.featured_card) : null,
+      row.featured_at,
       now,
       now,
     ],
@@ -158,4 +230,35 @@ export async function upsertTrainer(row: TrainerInsert): Promise<TrainerRow> {
     throw new Error("Could not save trainer: empty response.");
   }
   return saved;
+}
+
+/** First successful allotment only. Later calls leave the locked card in place. */
+export async function allotFeaturedCard(
+  username: string,
+  card: CreatureCard,
+  reel: string[],
+): Promise<{ trainer: TrainerRow; locked: boolean }> {
+  const handle = username.toLowerCase();
+  const existing = await getTrainer(handle);
+  if (!existing) {
+    throw new Error("Scan this trainer before allotting a specimen.");
+  }
+  if (existing.featured_card) {
+    return { trainer: existing, locked: true };
+  }
+
+  const now = new Date().toISOString();
+  await query(
+    `UPDATE commitdex_trainers
+     SET featured_card = ?, featured_at = ?, reel_commits = ?
+     WHERE github_username = ?
+       AND (featured_card IS NULL OR featured_card = '')`,
+    [JSON.stringify(card), now, JSON.stringify(reel), handle],
+  );
+
+  const saved = await getTrainer(handle);
+  if (!saved) {
+    throw new Error("Could not save the allotted card.");
+  }
+  return { trainer: saved, locked: saved.featured_card?.original_message !== card.original_message };
 }

@@ -2,9 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DexReel } from "@/components/DexReel";
 import { TRAINER_STAGES } from "@/lib/ritual";
+import type { CreatureCard } from "@/lib/types";
 
 type Status = "idle" | "loading" | "error" | "success";
+
+type ScanPayload = {
+  error?: string;
+  trainer?: { github_username: string; featured_card?: CreatureCard | null };
+  reel?: string[];
+  locked?: boolean;
+};
 
 export function TrainerScan() {
   const router = useRouter();
@@ -12,6 +21,9 @@ export function TrainerScan() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
   const [stage, setStage] = useState(0);
+  const [handle, setHandle] = useState<string | null>(null);
+  const [reel, setReel] = useState<string[]>([]);
+  const [featured, setFeatured] = useState<CreatureCard | null>(null);
 
   useEffect(() => {
     if (status !== "loading") return;
@@ -27,25 +39,32 @@ export function TrainerScan() {
     setStatus("loading");
     setError(undefined);
     setStage(0);
+    setHandle(null);
+    setReel([]);
+    setFeatured(null);
     try {
       const response = await fetch("/api/trainer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: trimmed }),
       });
-      const payload = (await response.json()) as {
-        error?: string;
-        trainer?: { github_username: string };
-      };
+      const payload = (await response.json().catch(() => ({}))) as ScanPayload;
       if (!response.ok) {
-        throw new Error(payload.error ?? "Scan failed.");
+        setStatus("error");
+        setError(typeof payload.error === "string" && payload.error ? payload.error : "The pokedex jammed. Try again in a minute.");
+        return;
       }
-      const handle = payload.trainer?.github_username ?? trimmed.toLowerCase();
+      const nextHandle = payload.trainer?.github_username ?? trimmed.toLowerCase();
+      setHandle(nextHandle);
+      setReel(payload.reel ?? []);
+      setFeatured(payload.trainer?.featured_card ?? null);
       setStatus("success");
-      router.push(`/t/${handle}`);
-    } catch (err) {
+      if (payload.locked && payload.trainer?.featured_card) {
+        router.push(`/t/${nextHandle}`);
+      }
+    } catch {
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Scan failed.");
+      setError("The pokedex jammed. Try again in a minute.");
     }
   }
 
@@ -56,7 +75,8 @@ export function TrainerScan() {
     <section className="hunt" id="scan">
       <h2 className="hunt__head">Scan a trainer</h2>
       <p className="hunt__lede">
-        Public GitHub username. We read commit messages and timestamps, never the diff.
+        Public GitHub username. We read commit messages and timestamps, never the diff. Then the
+        reel allots one specimen.
       </p>
       <form
         className="prompt"
@@ -108,6 +128,9 @@ export function TrainerScan() {
           </p>
         ) : null}
       </form>
+      {status === "success" && handle && !featured && reel.length > 0 ? (
+        <DexReel username={handle} reel={reel} />
+      ) : null}
     </section>
   );
 }

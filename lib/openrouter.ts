@@ -1,5 +1,4 @@
 import {
-  OPENROUTER_FALLBACKS,
   OPENROUTER_MODEL,
   isRequestableModel,
   isSafetyModel,
@@ -12,7 +11,10 @@ export const MODEL_JSON_ERROR =
   "The model did not return a card or trainer profile as JSON. A safety filter may have answered instead. Retry the scan.";
 
 const BUSY_ERROR =
-  "The free OpenRouter models are busy. Retry the scan in a minute.";
+  "The OpenRouter model is busy. Retry the scan in a minute.";
+
+const KEY_LIMIT_ERROR =
+  "OpenRouter key limit exceeded. Add credits or raise the key limit, then retry.";
 
 const TIMEOUT_ERROR = "The classifier timed out. Retry the scan.";
 
@@ -104,15 +106,23 @@ async function chatOnce(
     });
 
     const data = (await response.json().catch(() => ({}))) as ChatResponse;
+    const errMsg = data.error?.message ?? "";
     if (!response.ok) {
-      const detail = data.error?.message ?? `OpenRouter HTTP ${response.status}`;
-      if (response.status === 429 || /provider returned error/i.test(detail)) {
+      console.error("[commitdex:openrouter]", response.status, data.error);
+      if (/key limit exceeded/i.test(errMsg)) {
+        throw new Error(KEY_LIMIT_ERROR);
+      }
+      if (response.status === 429 || /provider returned error/i.test(errMsg)) {
         throw new Error(BUSY_ERROR);
       }
-      throw new Error(detail);
+      throw new Error(BUSY_ERROR);
     }
-    if (data.error?.message) {
-      throw new Error(data.error.message);
+    if (errMsg) {
+      console.error("[commitdex:openrouter]", data.error);
+      if (/key limit exceeded/i.test(errMsg)) {
+        throw new Error(KEY_LIMIT_ERROR);
+      }
+      throw new Error(BUSY_ERROR);
     }
     return data;
   } catch (error) {
@@ -125,21 +135,14 @@ async function chatOnce(
   }
 }
 
-function instructionFallbacks(except: string, pool: string[]): string[] {
-  return pool.filter(
-    (id) => id !== except && id !== "openrouter/free" && id !== "openrouter/auto" && isRequestableModel(id),
-  );
-}
-
 type CompleteOptions = {
   system: string;
   user: string;
   maxTokens: number;
   temperature: number;
-  models?: string[];
+  /** Single model id. Defaults to OPENROUTER_MODEL. */
+  model?: string;
   timeoutMs?: number;
-  packFallbacks?: boolean;
-  maxAttempts?: number;
   /** Cap hidden reasoning so JSON still fits in max_tokens. */
   reasoningMaxTokens?: number;
 };
@@ -161,13 +164,20 @@ function parseReply(data: ChatResponse, requested: string): { parsed: Record<str
   };
 }
 
-async function completeWithModel(
-  model: string,
+/**
+ * One HTTP attempt per call. No retries on 429/5xx, no fallback model chain,
+ * no packed `models` array, no second pass with response_format.
+ */
+export async function completeJson(
   options: CompleteOptions,
-  extras: string[],
 ): Promise<{ parsed: Record<string, unknown>; model: string }> {
+  const model = (options.model?.trim() || OPENROUTER_MODEL).trim();
+  if (!isRequestableModel(model)) {
+    throw new Error(MODEL_JSON_ERROR);
+  }
+
   const timeoutMs = options.timeoutMs ?? 12_000;
-  const base: Record<string, unknown> = {
+  const body: Record<string, unknown> = {
     model,
     temperature: options.temperature,
     max_tokens: options.maxTokens,
@@ -181,60 +191,11 @@ async function completeWithModel(
   };
 
   if (typeof options.reasoningMaxTokens === "number") {
-    base.reasoning = { exclude: true, max_tokens: options.reasoningMaxTokens };
+    body.reasoning = { exclude: true, max_tokens: options.reasoningMaxTokens };
   }
 
-  const packed = extras.length > 0 ? extras : instructionFallbacks(model, options.models ?? OPENROUTER_FALLBACKS);
-  if (packed.length > 0 && (options.packFallbacks || model === "openrouter/free" || model === "openrouter/auto")) {
-    base.models = packed;
-  }
-
-  const data = await chatOnce(base, timeoutMs);
-  try {
-    return parseReply(data, model);
-  } catch (parseError) {
-    const formatted = await chatOnce(
-      {
-        ...base,
-        response_format: { type: "json_object" },
-      },
-      timeoutMs,
-    );
-    try {
-      return parseReply(formatted, model);
-    } catch {
-      throw parseError;
-    }
-  }
-}
-
-export async function completeJson(
-  options: CompleteOptions,
-): Promise<{ parsed: Record<string, unknown>; model: string }> {
-  const chain =
-    options.models && options.models.length > 0
-      ? options.models.filter(isRequestableModel)
-      : OPENROUTER_FALLBACKS.length > 0
-        ? OPENROUTER_FALLBACKS
-        : [OPENROUTER_MODEL];
-  let lastError: unknown;
-
-  for (let i = 0; i < chain.length; i += 1) {
-    if (options.maxAttempts && i >= options.maxAttempts) break;
-    const model = chain[i];
-    if (!isRequestableModel(model)) continue;
-    const rest = chain.slice(i + 1).filter((id) => id !== "openrouter/free" && id !== "openrouter/auto");
-    try {
-      return await completeWithModel(model, options, options.packFallbacks ? rest : []);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError instanceof Error) {
-    throw lastError;
-  }
-  throw new Error(MODEL_JSON_ERROR);
+  const data = await chatOnce(body, timeoutMs);
+  return parseReply(data, model);
 }
 
 export const CLASSIFY_TIMEOUT_MS = 8_000;

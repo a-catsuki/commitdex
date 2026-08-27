@@ -12,17 +12,17 @@ export const PRINT_STAGES: DexStage[] = [
   {
     kicker: "dex query",
     title: "leafing the pokedex",
-    detail: "cross-indexing this vernacular against the known bestiary",
+    detail: "cross-indexing this vernacular",
   },
   {
     kicker: "rarity ping",
     title: "establishing rarity",
-    detail: "weighing how tired this sentence already is",
+    detail: "weighing how tired this sentence is",
   },
   {
     kicker: "type chart",
     title: "checking type effectiveness",
-    detail: "lazy resists effort. panic hits everything. corporate is immune to jokes",
+    detail: "lazy resists effort. panic hits everything",
   },
   {
     kicker: "foil align",
@@ -32,7 +32,7 @@ export const PRINT_STAGES: DexStage[] = [
   {
     kicker: "print head",
     title: "printing specimen",
-    detail: "thermal head chewing a blank. hold still",
+    detail: "thermal head chewing a blank",
   },
 ];
 

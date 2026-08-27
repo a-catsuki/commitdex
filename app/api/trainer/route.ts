@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { classifyProfile } from "@/lib/classify-profile";
+import { curateCommits } from "@/lib/curate";
 import { getTrainer, upsertTrainer } from "@/lib/db";
 import { fetchGithubUser, fetchPublicCommits, normalizeUsername } from "@/lib/github";
 import { leagueFor } from "@/lib/league";
-import { MODEL_JSON_ERROR } from "@/lib/openrouter";
+import { COPY, jsonError, jsonFromError } from "@/lib/public-error";
 import { clientKey, rateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -13,20 +14,14 @@ const CACHE_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   if (rateLimited(`trainer:${clientKey(request)}`, 6, 10 * 60 * 1000)) {
-    return NextResponse.json(
-      { error: "Too many scans from this address. Wait a bit, then try another trainer." },
-      { status: 429 },
-    );
+    return jsonError(429, COPY.tooManyScans);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json(
-      { error: "Send { username: string } as JSON." },
-      { status: 400 },
-    );
+    return jsonError(400, COPY.badJson);
   }
 
   const raw =
@@ -35,20 +30,11 @@ export async function POST(request: Request) {
       : "";
   const username = normalizeUsername(raw);
   if (!username) {
-    return NextResponse.json(
-      { error: "That is not a GitHub username. Letters, numbers, and hyphens only." },
-      { status: 400 },
-    );
+    return jsonError(400, COPY.badUsername);
   }
 
   if (!process.env.OPENROUTER_API_KEY) {
-    return NextResponse.json(
-      {
-        error:
-          "Trainer scans need a free OpenRouter model. Add OPENROUTER_API_KEY to .env.local, then retry.",
-      },
-      { status: 503 },
-    );
+    return jsonError(503, COPY.classifyOffline);
   }
 
   try {
@@ -56,7 +42,12 @@ export async function POST(request: Request) {
     const fresh =
       existing && Date.now() - new Date(existing.computed_at).getTime() < CACHE_MS;
     if (existing && fresh) {
-      return NextResponse.json({ trainer: existing, cached: true });
+      return NextResponse.json({
+        trainer: existing,
+        cached: true,
+        reel: existing.reel_commits.length > 0 ? existing.reel_commits : existing.sample_messages,
+        locked: Boolean(existing.featured_card),
+      });
     }
 
     const user = await fetchGithubUser(username);
@@ -65,6 +56,8 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const predictions =
       existing && existing.predictions.length > 0 ? existing.predictions : draft.predictions;
+    const messages = commits.map((c) => c.message);
+    const reel = curateCommits(messages);
 
     const trainer = await upsertTrainer({
       github_username: user.login.toLowerCase(),
@@ -79,35 +72,20 @@ export async function POST(request: Request) {
       chaos: draft.stats.chaos,
       total_commits_analyzed: commits.length,
       predictions,
-      sample_messages: commits.slice(0, 8).map((c) => c.message),
+      sample_messages: messages.slice(0, 8),
+      reel_commits: reel,
+      featured_card: existing?.featured_card ?? null,
+      featured_at: existing?.featured_at ?? null,
       computed_at: now,
     });
 
-    return NextResponse.json({ trainer, cached: false });
+    return NextResponse.json({
+      trainer,
+      cached: false,
+      reel: trainer.reel_commits,
+      locked: Boolean(trainer.featured_card),
+    });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "unknown error";
-    if (/no public user|No public commit/i.test(detail)) {
-      return NextResponse.json({ error: detail }, { status: 404 });
-    }
-    if (/rate-limiting this lookup|GITHUB_TOKEN|rejected the credentials/i.test(detail)) {
-      return NextResponse.json({ error: detail }, { status: 429 });
-    }
-    if (
-      /Unexpected token|not valid JSON|did not return a card or trainer|safety filter/i.test(
-        detail,
-      )
-    ) {
-      return NextResponse.json({ error: MODEL_JSON_ERROR }, { status: 502 });
-    }
-    if (/D1 is not configured|Could not query D1|SQLITE|EACCES|EPERM/i.test(detail)) {
-      return NextResponse.json(
-        {
-          error:
-            "Trainer storage is unavailable. Set Cloudflare D1 env vars, or check that local SQLite in data/ is writable.",
-        },
-        { status: 503 },
-      );
-    }
-    return NextResponse.json({ error: detail }, { status: 502 });
+    return jsonFromError(error, "trainer");
   }
 }

@@ -62,9 +62,16 @@ export function Workbench() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: trimmed }),
       });
-      const payload = (await response.json()) as CardData & { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as CardData & { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Classifier returned an error.");
+        if (runRef.current !== run) return;
+        setStatus("error");
+        setError(
+          typeof payload.error === "string" && payload.error
+            ? payload.error
+            : "The pokedex jammed. Try again in a minute.",
+        );
+        return;
       }
 
       const wait = floor - (performance.now() - started);
@@ -73,14 +80,10 @@ export function Workbench() {
 
       setCard(payload);
       setStatus("success");
-    } catch (err) {
+    } catch {
       if (runRef.current !== run) return;
       setStatus("error");
-      setError(
-        err instanceof Error
-          ? err.message
-          : "The classifier did not return a creature. Try again.",
-      );
+      setError("The pokedex jammed. Try again in a minute.");
     } finally {
       if (tick) window.clearInterval(tick);
     }

@@ -15,8 +15,7 @@ export type GitHubUser = {
 
 const USERNAME_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
 
-const RATE_LIMIT_MESSAGE =
-  "GitHub is rate-limiting this lookup. Add GITHUB_TOKEN to .env.local (a classic PAT is enough), then retry.";
+const RATE_LIMIT_MESSAGE = "GitHub is rate-limiting this lookup.";
 
 export function normalizeUsername(raw: string): string | null {
   const cleaned = raw.trim().replace(/^@/, "");
@@ -45,17 +44,21 @@ function githubStatus(error: unknown): number | undefined {
 
 function throwGitHub(error: unknown, notFoundMessage?: string): never {
   const status = githubStatus(error);
-  const message = error instanceof Error ? error.message : "GitHub lookup failed.";
+  console.error("[commitdex:github]", error);
   if (status === 404 && notFoundMessage) {
     throw new Error(notFoundMessage);
   }
   if (status === 401) {
-    throw new Error("GitHub rejected the credentials. Check GITHUB_TOKEN in .env.local.");
+    throw new Error("GitHub rejected the credentials.");
   }
-  if (status === 403 || status === 429 || /rate limit/i.test(message)) {
+  if (status === 403 || status === 429) {
     throw new Error(RATE_LIMIT_MESSAGE);
   }
-  throw new Error(message);
+  const message = error instanceof Error ? error.message : "GitHub lookup failed.";
+  if (/rate limit/i.test(message)) {
+    throw new Error(RATE_LIMIT_MESSAGE);
+  }
+  throw new Error("GitHub lookup failed.");
 }
 
 export async function fetchGithubUser(username: string): Promise<GitHubUser> {

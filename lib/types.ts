@@ -47,6 +47,24 @@ export function isRarity(value: string): value is Rarity {
   return (RARITIES as readonly string[]).includes(value);
 }
 
+export function isCreatureCard(value: unknown): value is CreatureCard {
+  if (!value || typeof value !== "object") return false;
+  const card = value as CreatureCard;
+  return (
+    typeof card.name === "string" &&
+    card.name.length > 0 &&
+    isCreatureType(card.type) &&
+    isRarity(card.rarity) &&
+    typeof card.flavor_text === "string" &&
+    typeof card.original_message === "string" &&
+    card.stats != null &&
+    typeof card.stats.clarity === "number" &&
+    typeof card.stats.effort === "number" &&
+    typeof card.stats.honesty === "number" &&
+    typeof card.stats.chaos === "number"
+  );
+}
+
 export function clampStat(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 0;

@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS commitdex_trainers (
   total_commits_analyzed INTEGER NOT NULL,
   predictions TEXT NOT NULL DEFAULT '[]',
   sample_messages TEXT NOT NULL DEFAULT '[]',
+  reel_commits TEXT NOT NULL DEFAULT '[]',
+  featured_card TEXT,
+  featured_at TEXT,
   computed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );

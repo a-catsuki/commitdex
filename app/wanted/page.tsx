@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { TrainerScan } from "@/components/TrainerScan";
 import { TypeChip } from "@/components/TypeChip";
+import { COPY } from "@/lib/public-error";
 import { listWanted } from "@/lib/db";
 import { isCreatureType } from "@/lib/types";
 
@@ -20,7 +21,8 @@ export default async function WantedPage() {
   try {
     trainers = await listWanted(50);
   } catch (error) {
-    loadError = error instanceof Error ? error.message : "Most Wanted is empty or unreachable.";
+    console.error("[commitdex:wanted]", error);
+    loadError = COPY.wantedOffline;
   }
 
   return (
@@ -78,6 +80,11 @@ export default async function WantedPage() {
                         <TypeChip type={type} />
                         <LeagueBadge league={trainer.league} />
                         <span className="chaos-pip">chaos {trainer.chaos}</span>
+                        {trainer.featured_card ? (
+                          <span className="poster__foil">{trainer.featured_card.name}</span>
+                        ) : (
+                          <span className="poster__foil poster__foil--empty">no foil</span>
+                        )}
                       </span>
                     </span>
                   </Link>

@@ -14,12 +14,22 @@ CREATE TABLE IF NOT EXISTS commitdex_trainers (
   total_commits_analyzed INTEGER NOT NULL,
   predictions TEXT NOT NULL DEFAULT '[]',
   sample_messages TEXT NOT NULL DEFAULT '[]',
+  reel_commits TEXT NOT NULL DEFAULT '[]',
+  featured_card TEXT,
+  featured_at TEXT,
   computed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS commitdex_trainers_chaos_idx
   ON commitdex_trainers (chaos DESC, computed_at DESC);
+`;
+
+/** Existing D1/SQLite tables need these columns. Duplicate-column errors are ignored. */
+export const TRAINER_ALTER_SQL = `
+ALTER TABLE commitdex_trainers ADD COLUMN reel_commits TEXT;
+ALTER TABLE commitdex_trainers ADD COLUMN featured_card TEXT;
+ALTER TABLE commitdex_trainers ADD COLUMN featured_at TEXT;
 `;
 
 export function splitSqlStatements(sql: string): string[] {
@@ -33,4 +43,9 @@ export function splitSqlStatements(sql: string): string[] {
         .trim(),
     )
     .filter(Boolean);
+}
+
+export function isDuplicateColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /duplicate column/i.test(message);
 }
