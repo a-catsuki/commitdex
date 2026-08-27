@@ -1,0 +1,53 @@
+export const CREATURE_TYPES = [
+  "lazy",
+  "vague",
+  "panic",
+  "overconfident",
+  "passive-aggressive",
+  "corporate",
+  "chaotic",
+  "emoji",
+] as const;
+
+export type CreatureType = (typeof CREATURE_TYPES)[number];
+
+export const RARITIES = [
+  "common",
+  "uncommon",
+  "rare",
+  "legendary",
+  "shiny",
+] as const;
+
+export type Rarity = (typeof RARITIES)[number];
+
+export type CardStats = {
+  clarity: number;
+  effort: number;
+  honesty: number;
+  chaos: number;
+};
+
+export type CreatureCard = {
+  name: string;
+  type: CreatureType;
+  rarity: Rarity;
+  stats: CardStats;
+  flavor_text: string;
+  original_message: string;
+  source: "claude" | "heuristic";
+};
+
+export function isCreatureType(value: string): value is CreatureType {
+  return (CREATURE_TYPES as readonly string[]).includes(value);
+}
+
+export function isRarity(value: string): value is Rarity {
+  return (RARITIES as readonly string[]).includes(value);
+}
+
+export function clampStat(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}

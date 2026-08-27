@@ -1,7 +1,17 @@
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteNav } from "@/components/SiteNav";
+import { TypeSheet } from "@/components/TypeSheet";
+import { Workbench } from "@/components/Workbench";
+
 export default function Home() {
   return (
-    <main>
-      <div>Hello world!</div>
-    </main>
+    <>
+      <SiteNav />
+      <main>
+        <Workbench />
+        <TypeSheet />
+      </main>
+      <SiteFooter />
+    </>
   );
 }
