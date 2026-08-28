@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { classifyProfile } from "@/lib/classify-profile";
 import { curateCommits, curateCommitsForSpin } from "@/lib/curate";
-import { getTrainer, toPublicTrainer, upsertTrainer } from "@/lib/db";
+import { getTrainer, toPublicTrainer, type TrainerRow, upsertTrainer } from "@/lib/db";
 import { fetchGithubUser, fetchPublicCommits, normalizeUsername, type GitHubCommit } from "@/lib/github";
+import { sessionMatchesTrainer } from "@/lib/github-auth";
 import { leagueFor } from "@/lib/league";
 import { COPY, jsonError, jsonFromError } from "@/lib/public-error";
 import { clientKey, rateLimited } from "@/lib/rate-limit";
@@ -47,6 +49,10 @@ export async function POST(request: Request) {
     return jsonError(400, COPY.badUsername);
   }
 
+  const session = await auth();
+  const login = session?.login ?? session?.user?.login;
+  const canClaim = sessionMatchesTrainer(login, username);
+
   if (!process.env.OPENROUTER_API_KEY) {
     return jsonError(503, COPY.classifyOffline);
   }
@@ -68,6 +74,7 @@ export async function POST(request: Request) {
           trainer: toPublicTrainer(existing),
           cached: true,
           reel,
+          saved: true,
           locked: true,
           canSpin: false,
           spinLockedReason: COPY.alreadyPulledToday,
@@ -94,6 +101,7 @@ export async function POST(request: Request) {
         trainer: toPublicTrainer(existing),
         cached: true,
         reel: reel.length > 0 ? reel : existing.sample_messages,
+        saved: true,
         ...flags,
       });
     }
@@ -110,7 +118,7 @@ export async function POST(request: Request) {
       ? curateCommitsForSpin(commits, existing?.featured_at)
       : curateCommits(messages);
 
-    const trainer = await upsertTrainer({
+    const candidate: TrainerRow = {
       github_username: user.login.toLowerCase(),
       github_id: user.id,
       avatar_url: user.avatarUrl,
@@ -127,8 +135,14 @@ export async function POST(request: Request) {
       reel_commits: reel,
       featured_card: existing?.featured_card ?? null,
       featured_at: existing?.featured_at ?? null,
+      photo_url: existing?.photo_url ?? null,
+      photo_data: existing?.photo_data ?? null,
+      photo_updated_at: existing?.photo_updated_at ?? null,
       computed_at: now,
-    });
+      created_at: existing?.created_at ?? now,
+    };
+    const trainer = canClaim ? await upsertTrainer(candidate) : candidate;
+    const saved = Boolean(existing) || canClaim;
 
     const flags = spinFlagsForTrainer(
       Boolean(trainer.featured_card),
@@ -140,6 +154,7 @@ export async function POST(request: Request) {
       trainer: toPublicTrainer(trainer),
       cached: false,
       reel: trainer.reel_commits,
+      saved,
       ...flags,
     });
   } catch (error) {

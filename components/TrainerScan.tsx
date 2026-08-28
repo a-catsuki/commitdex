@@ -12,6 +12,7 @@ type ScanPayload = {
   error?: string;
   trainer?: { github_username: string; featured_card?: CreatureCard | null };
   reel?: string[];
+  saved?: boolean;
   locked?: boolean;
   canSpin?: boolean;
   spinLockedReason?: string | null;
@@ -27,6 +28,7 @@ export function TrainerScan() {
   const [reel, setReel] = useState<string[]>([]);
   const [featured, setFeatured] = useState<CreatureCard | null>(null);
   const [canSpin, setCanSpin] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (status !== "loading") return;
@@ -46,6 +48,7 @@ export function TrainerScan() {
     setReel([]);
     setFeatured(null);
     setCanSpin(false);
+    setSaved(false);
     try {
       const response = await fetch("/api/trainer", {
         method: "POST",
@@ -69,6 +72,7 @@ export function TrainerScan() {
       setReel(payload.reel ?? []);
       setFeatured(nextFeatured);
       setCanSpin(nextCanSpin);
+      setSaved(payload.saved ?? false);
       setStatus("success");
       // Locked foil: skip reel, open dossier (reason lives on the poster).
       if (nextFeatured && !nextCanSpin) {
@@ -88,8 +92,8 @@ export function TrainerScan() {
     <section className="hunt" id="scan">
       <h2 className="hunt__head">Scan a trainer</h2>
       <p className="hunt__lede">
-        Public GitHub username. We read commit messages and timestamps, never the diff. Then the
-        reel allots one specimen.
+        Public GitHub username. We read commit messages and timestamps, never the diff. Verify the
+        matching GitHub login to save the trainer and crank the reel.
       </p>
       <form
         className="prompt"
@@ -123,7 +127,7 @@ export function TrainerScan() {
         </label>
         <div className="prompt__row">
           <p id="hunt-help" className="prompt__help">
-            Public repos only. Results land on Most Wanted.
+            Public repos only. Verify to land on Most Wanted.
           </p>
           <button
             type="submit"
@@ -146,6 +150,7 @@ export function TrainerScan() {
           username={handle}
           reel={reel}
           mode={featured ? "respin" : "first"}
+          saved={saved}
         />
       ) : null}
     </section>

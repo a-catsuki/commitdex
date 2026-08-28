@@ -1,6 +1,10 @@
+import { predictionCategoryPromptList } from "./prediction-icons";
+
 export const CARD_SYSTEM_PROMPT = `Mint one collectible creature from THIS git commit. JSON only.
 
-name: one lowercase invented word, no spaces, 13 characters max. Pun or portmanteau of words that actually appear in this commit so the message is still audible in the name. Must reuse letter chunks from at least two distinct words in the commit (or the only word, if it is a single token). Unique to this message. Ban suffixes -odile -scream -geist -puff -zard -sting -bot -moji. Ban stock names fixodile pleascream asdfgeist updatoth wipuff stufflax. Ban generic unused words like glitch, blob, sprite. If the pun wants to run long, compress it to 13 letters instead of padding a canned suffix.
+name: one lowercase, letters-only species name, 5–13 characters, no spaces or punctuation. Make it evocative, pronounceable, and creature-like: a rhythmic 2–4 syllable name with an unusual consonant/vowel shape that could belong in a bestiary. Read the whole commit and choose one specific semantic hook from its emotional energy, imagery, key concept, or type; reflect that hook subtly rather than spelling out the message. One clever mutation or invented root is welcome. Do not mechanically concatenate two or more full source words, do not merely truncate source text, and do not name it after the first two words. The name should feel intentional and unique to THIS message.
+
+Type-aware phonetic flavor: lazy=soft, slumped, cozy, or syrupy sounds; vague=airy, uncertain, misty sounds; panic=sharp, urgent, crackling sounds; overconfident=regal, heavy, grandiose sounds; passive-aggressive=polished but barbed sounds; corporate=clipped, industrial, official sounds; chaotic=asymmetric and unpredictable but still pronounceable sounds; emoji=expressive, light, symbolic sounds. Say the name aloud. If it sounds like a variable, filename, error code, or random word mash, revise it. Ban generic placeholders like missingno, commitmon, glitch, blob, and sprite; ban famous/canned creature names and stock suffixes like -odile, -scream, -geist, -puff, -zard, -sting, -bot, and -moji.
 
 type: exactly one of lazy | vague | panic | overconfident | passive-aggressive | corporate | chaotic | emoji. Justify from the writing, never at random. lazy=generic verbs/minimal effort. vague=does not say what changed. panic=caps, please, desperation. overconfident=promises the world. passive-aggressive=subtext at a person. corporate=jargon/performance-review tone. chaotic=noise, smash, unhinged. emoji=mostly pictographs.
 
@@ -12,7 +16,7 @@ rarity: common=generic ("fix","update"); uncommon=a little personality; rare=gen
 
 No markdown. No commentary. No extra keys.`;
 
-export const CARD_JSON_HINT = `{"name":"lowercase portmanteau, max 13 chars","type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","rarity":"common|uncommon|rare|legendary|shiny","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"flavor_text":"1–2 punchy Pokedex roast sentences about the energy, not a restatement of the commit"}`;
+export const CARD_JSON_HINT = `{"name":"lowercase 5–13 character species name; pronounceable, rhythmic, semantic hook; no raw word concatenation","type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","rarity":"common|uncommon|rare|legendary|shiny","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"flavor_text":"1–2 punchy Pokedex roast sentences about the energy, not a restatement of the commit"}`;
 
 export const PROFILE_SYSTEM_PROMPT = `Invent a trainer profile from one person's real git commit messages. JSON only.
 
@@ -22,12 +26,18 @@ dominant_type: exactly one of lazy, vague, panic, overconfident, passive-aggress
 
 stats 0–100 (clarity, effort, honesty, chaos): spirit of the batch, not a literal mean.
 
-predictions: 3–5 short funny punchlines (one line each, ~8–14 words). Not a horoscope. Ground each joke in this batch — verbs, timing (night/weekend/burst), message patterns, or named quirks that actually appear. No generic "you work hard" / zodiac filler.
+predictions: exactly 3–5 items, each using a distinct category from this allowlist:
+${predictionCategoryPromptList()}
+Only choose categories supported by the commit batch. Never duplicate a category or invent evidence.
 
-icon: MUST be exactly one allowlisted slug, chosen for meaning (not decoration): ti-coffee (CAFFEINE), ti-moon (LATE NIGHTS), ti-keyboard (KEYSMASH), ti-bolt (BURST), ti-clock (CLOCKWATCH), ti-flame (ON FIRE), ti-briefcase (CORP SPEAK), ti-ghost (GHOSTED), ti-rocket (OVERCOMMIT), ti-mood-smile (PICTOGRAPH). Never invent other ti-* names.
+title: 2–6 words, an original funny title specific to its category, not a generic horoscope.
 
-Ground persona and at least one prediction in something that actually appears in the batch.
+text: exactly one short sentence, about 8–16 words. Make the joke specific to observed commit words, timing, or patterns. The text itself must provide the grounding, with no evidence field.
+
+icon: optional decorative slug. If present, use only the category's mapped icon. Never invent other ti-* names.
+
+Use playful "will probably..." framing, not factual claims about the person. Never infer sensitive traits or mention marriage, health, politics, finances, location, or identity. Ground the persona and predictions in the batch.
 
 No markdown. No commentary.`;
 
-export const PROFILE_JSON_HINT = `{"dominant_type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","persona_title":"short original epithet","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"predictions":[{"icon":"ti-moon","text":"3am fix commits, still shipping typos"}]}`;
+export const PROFILE_JSON_HINT = `{"dominant_type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","persona_title":"short original epithet","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"predictions":[{"category":"song_on_repeat","title":"The Fix-Commit Mixtape","icon":"ti-music","text":"Will probably replay every fix commit until the deploy chorus finally lands."}]}`;

@@ -1,7 +1,16 @@
 import { query } from "./d1";
 import type { League } from "./league";
 import type { PhotoMime } from "./photo-store";
-import type { PredictionIcon } from "./prediction-icons";
+import {
+  categoryFromLegacyIcon,
+  isPredictionCategoryInput,
+  normalizePredictionIcon,
+  normalizePredictionCategory,
+  normalizePredictionText,
+  normalizePredictionTitle,
+  type PredictionCategory,
+  type PredictionIcon,
+} from "./prediction-icons";
 import {
   clampStat,
   isCreatureType,
@@ -11,7 +20,9 @@ import {
 } from "./types";
 
 export type Prediction = {
-  icon: PredictionIcon;
+  category: PredictionCategory;
+  title: string;
+  icon?: PredictionIcon;
   text: string;
 };
 
@@ -97,6 +108,33 @@ function parseJsonArray<T>(value: unknown): T[] {
   return [];
 }
 
+function normalizeStoredPredictions(value: unknown): Prediction[] {
+  const seenCategories = new Set<PredictionCategory>();
+  return parseJsonArray<unknown>(value)
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const text = normalizePredictionText(row.text);
+      if (!text) return null;
+
+      const category =
+        typeof row.category === "string" && isPredictionCategoryInput(row.category.trim().toLowerCase())
+          ? normalizePredictionCategory(row.category)
+          : categoryFromLegacyIcon(row.icon);
+      if (seenCategories.has(category)) return null;
+      seenCategories.add(category);
+
+      return {
+        category,
+        title: normalizePredictionTitle(row.title, category),
+        ...(row.icon == null ? {} : { icon: normalizePredictionIcon(row.icon) }),
+        text,
+      };
+    })
+    .filter((row): row is Prediction => row !== null)
+    .slice(0, 5);
+}
+
 function parseFeaturedCard(value: unknown): CreatureCard | null {
   if (value == null || value === "") return null;
   let parsed: unknown = value;
@@ -146,7 +184,7 @@ function mapTrainer(row: TrainerRecord): TrainerRow {
     honesty: asNumber(row.honesty),
     chaos: asNumber(row.chaos),
     total_commits_analyzed: asNumber(row.total_commits_analyzed),
-    predictions: parseJsonArray<Prediction>(row.predictions),
+    predictions: normalizeStoredPredictions(row.predictions),
     sample_messages: parseJsonArray<string>(row.sample_messages),
     reel_commits: parseJsonArray<string>(row.reel_commits),
     featured_card: parseFeaturedCard(row.featured_card),

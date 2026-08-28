@@ -40,7 +40,7 @@ export default async function WantedPage() {
           <p className="wanted__kicker">the holding cell</p>
           <h1 className="wanted__title">Most Wanted</h1>
           <p className="wanted__lede">
-            Ranked by chaos. Posted here the moment someone scans a public GitHub history.
+            Ranked by chaos. Posted here after a matching GitHub login claims a public history.
           </p>
         </header>
 

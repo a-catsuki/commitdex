@@ -113,6 +113,9 @@
 
   --hud-ink: var(--color-accent);
   --hud-paper: var(--color-paper-2);
+  --hud-grid: color-mix(in oklch, var(--color-accent) 10%, transparent);
+  --hud-grid-size: 18px;
+  --hud-glow: color-mix(in oklch, var(--color-accent) 24%, transparent);
 
   /* CRT WANTED posters — phosphor HUD boards (not parchment). */
   --wanted-paper: var(--color-paper-2);

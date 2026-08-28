@@ -5,7 +5,7 @@ import { CardPack } from "@/components/CardPack";
 import { CommitPrompt } from "@/components/CommitPrompt";
 import { CreatureCard } from "@/components/CreatureCard";
 import { PrintBay } from "@/components/PrintBay";
-import { downloadCardPng } from "@/lib/download-card";
+import { downloadCardGif, downloadCardPng } from "@/lib/download-card";
 import {
   PRINT_STAGES,
   RITUAL_MS,
@@ -30,6 +30,7 @@ export function Workbench() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
   const [reduced, setReduced] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -97,7 +98,7 @@ export function Workbench() {
   }
 
   async function download() {
-    if (!cardRef.current || !card) return;
+    if (!cardRef.current || !card || exporting) return;
     setSaving(true);
     try {
       await downloadCardPng(cardRef.current, `${card.name}-${card.type}.png`);
@@ -109,11 +110,39 @@ export function Workbench() {
     }
   }
 
+  async function exportOpening() {
+    if (!cardRef.current || !card || saving || exporting) return;
+    setExporting(true);
+    try {
+      await downloadCardGif(
+        cardRef.current,
+        `${card.name}-${card.type}`,
+        prefersReducedMotion(),
+      );
+    } catch {
+      setError("Could not export the opening. Try a different browser.");
+      setStatus("error");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const stage = PRINT_STAGES[Math.min(stageIndex, PRINT_STAGES.length - 1)];
 
   return (
     <section className="bench" id="classify">
       <div className="bench__copy">
+        <div className="bench__identity" aria-label="Commitdex classifier">
+          <span className="bench__identity-mark" aria-hidden="true">CDX</span>
+          <span className="bench__identity-copy">
+            <span>COMMITDEX</span>
+            <span>MESSAGE SPECIMEN LAB</span>
+          </span>
+          <span className="bench__identity-state">
+            <span className="bench__identity-led" aria-hidden="true" />
+            ONLINE
+          </span>
+        </div>
         <p className="bench__lede">Paste a commit. Print a creature.</p>
         <CommitPrompt
           value={message}
@@ -155,10 +184,20 @@ export function Workbench() {
                 type="button"
                 className="btn btn--ghost"
                 onClick={() => void download()}
-                disabled={saving}
+                disabled={saving || exporting}
                 data-state={saving ? "loading" : "idle"}
               >
                 {saving ? "saving…" : "download png"}
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => void exportOpening()}
+                disabled={saving || exporting}
+                data-state={exporting ? "loading" : "idle"}
+                aria-label="Export card opening as animated GIF"
+              >
+                {exporting ? "encoding…" : "export opening"}
               </button>
               <p className="bench__note">Roasted by {card.model}.</p>
             </div>

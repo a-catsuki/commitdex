@@ -32,6 +32,8 @@ type Motion = "rest" | "race" | "settle";
 type Props = {
   username: string;
   reel: string[];
+  /** A fresh public scan is only a preview until the matching GitHub login saves it. */
+  saved?: boolean;
   /** When set, reel starts printed on this foil (locked view). */
   lockedCard?: CardData | null;
   /** First allotment vs a new UTC-day re-pull. */
@@ -69,6 +71,7 @@ function parkOffset(reelItems: string[], lockedMessage?: string | null) {
 export function DexReel({
   username,
   reel,
+  saved = true,
   lockedCard = null,
   mode = "first",
   lockReason = null,
@@ -95,10 +98,11 @@ export function DexReel({
     return idx >= 0 ? reel.length + idx : null;
   });
 
-  const login = session?.login;
+  const login = session?.login ?? session?.user?.login;
   const canBooth = sessionMatchesTrainer(login, username);
   const lockedView = Boolean(lockedCard) && phase === "printed";
-  const canCrank = !lockedView && phase !== "spinning" && !card;
+  const canClaim = canBooth;
+  const canCrank = !lockedView && phase !== "spinning" && !card && canClaim;
   const showBoothOffer =
     phase === "printed" && Boolean(card) && !lockedView && !boothDone && !boothOpen;
 
@@ -329,16 +333,42 @@ export function DexReel({
 
       {phase !== "printed" ? (
         <div className="dex-reel__actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => void crank()}
-            disabled={busy || reel.length === 0 || !canCrank}
-            aria-busy={busy}
-            data-state={busy ? "loading" : error ? "error" : "idle"}
-          >
-            {busy ? "cranking reel" : mode === "respin" ? "crank for a new pull" : "crank the reel"}
-          </button>
+          {authStatus === "loading" ? (
+            <button type="button" className="btn" disabled>
+              checking GitHub
+            </button>
+          ) : canClaim ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void crank()}
+              disabled={busy || reel.length === 0 || !canCrank}
+              aria-busy={busy}
+              data-state={busy ? "loading" : error ? "error" : "idle"}
+            >
+              {busy ? "cranking reel" : mode === "respin" ? "crank for a new pull" : "crank the reel"}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void signIn("github", {
+                    redirectTo: typeof window !== "undefined" ? window.location.href : "/",
+                  })
+                }
+                disabled={busy || reel.length === 0}
+              >
+                {login ? "CLAIM THIS TRAINER" : "VERIFY GITHUB TO CRANK"}
+              </button>
+              <p className="dex-reel__lock" role="status">
+                {login
+                  ? "That trainer belongs to a different GitHub login."
+                  : "Verify GitHub with the matching login to crank and save this trainer."}
+              </p>
+            </>
+          )}
           {error ? (
             <p className="prompt__error" role="alert">
               {error}
@@ -369,10 +399,8 @@ export function DexReel({
                       className="btn"
                       onClick={() =>
                         void signIn("github", {
-                          callbackUrl:
-                            typeof window !== "undefined"
-                              ? window.location.href
-                              : "/",
+                          redirectTo:
+                            typeof window !== "undefined" ? window.location.href : "/",
                         })
                       }
                     >
@@ -448,16 +476,18 @@ export function DexReel({
             />
           ) : null}
 
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              router.push(`/t/${username}`);
-              router.refresh();
-            }}
-          >
-            open dossier
-          </button>
+          {saved ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                router.push(`/t/${username}`);
+                router.refresh();
+              }}
+            >
+              open dossier
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

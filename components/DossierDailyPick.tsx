@@ -3,8 +3,9 @@
 import { useRef, useState } from "react";
 import { CreatureCard } from "@/components/CreatureCard";
 import { DexReel } from "@/components/DexReel";
-import { downloadCardPng } from "@/lib/download-card";
+import { downloadCardGif, downloadCardPng } from "@/lib/download-card";
 import { COPY } from "@/lib/public-error";
+import { prefersReducedMotion } from "@/lib/ritual";
 import type { CreatureCard as CardData } from "@/lib/types";
 
 type Props = {
@@ -38,6 +39,7 @@ export function DossierDailyPick({
 }: Props) {
   const cardRef = useRef<HTMLElement>(null);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -47,7 +49,7 @@ export function DossierDailyPick({
   }
 
   async function download() {
-    if (!cardRef.current || saving) return;
+    if (!cardRef.current || saving || exporting) return;
     setSaving(true);
     try {
       await downloadCardPng(cardRef.current, `${card.name}-${card.type}.png`);
@@ -56,6 +58,23 @@ export function DossierDailyPick({
       ping("export jammed · try another browser");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function exportOpening() {
+    if (!cardRef.current || saving || exporting) return;
+    setExporting(true);
+    try {
+      await downloadCardGif(
+        cardRef.current,
+        `${card.name}-${card.type}`,
+        prefersReducedMotion(),
+      );
+      ping("gif burned · check downloads");
+    } catch {
+      ping("opening jammed · try another browser");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -98,7 +117,7 @@ export function DossierDailyPick({
         type="button"
         className="dossier-hud-btn"
         onClick={() => void download()}
-        disabled={saving}
+        disabled={saving || exporting}
         data-state={saving ? "loading" : "idle"}
         aria-label="Download creature card as PNG"
       >
@@ -107,8 +126,18 @@ export function DossierDailyPick({
       <button
         type="button"
         className="dossier-hud-btn"
+        onClick={() => void exportOpening()}
+        disabled={saving || exporting}
+        data-state={exporting ? "loading" : "idle"}
+        aria-label="Export creature card opening as animated GIF"
+      >
+        {exporting ? "encoding…" : "export opening"}
+      </button>
+      <button
+        type="button"
+        className="dossier-hud-btn"
         onClick={() => void share()}
-        disabled={sharing}
+        disabled={sharing || exporting}
         data-state={sharing ? "loading" : "idle"}
         aria-label="Share trainer profile link"
       >

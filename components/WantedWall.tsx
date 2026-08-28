@@ -245,7 +245,8 @@ export function WantedWall({ trainers }: Props) {
             spellCheck={false}
           />
         </label>
-        <p className="wanted__count" aria-live="polite">
+        <p className="wanted__count" aria-live="polite" data-searching={searching}>
+          <span className="wanted__count-led" aria-hidden="true" />
           {filtered.length}/{trainers.length} posters
         </p>
       </div>

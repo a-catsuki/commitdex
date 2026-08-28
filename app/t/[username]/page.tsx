@@ -14,7 +14,7 @@ import { getTrainer, trainerPhotoSrc } from "@/lib/db";
 import { fetchPublicCommits } from "@/lib/github";
 import { LEAGUE_LABEL } from "@/lib/league";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
-import { predictionIconLabel } from "@/lib/prediction-icons";
+import { predictionCategoryLabel, predictionCategorySymbol } from "@/lib/prediction-icons";
 import { COPY } from "@/lib/public-error";
 import { evaluateSpinEligibility, isNewUtcDaySince } from "@/lib/spin-eligibility";
 import { TYPE_META } from "@/lib/type-meta";
@@ -252,13 +252,19 @@ export default async function TrainerPage({ params }: PageProps) {
             </div>
             <ul className="dossier-preds">
               {trainer.predictions.map((prediction, i) => (
-                <li key={`${i}-${prediction.text.slice(0, 24)}`} className="dossier-pred">
-                  <span className="dossier-pred__tag" aria-hidden="true">
-                    {predictionIconLabel(prediction.icon)}
-                  </span>
-                  <span className="dossier-pred__text" title={prediction.text}>
+                <li key={`${prediction.category}-${i}`} className="dossier-pred">
+                  <div className="dossier-pred__topline">
+                    <span className="dossier-pred__icon" aria-hidden="true">
+                      {predictionCategorySymbol(prediction.category)}
+                    </span>
+                    <span className="dossier-pred__tag">
+                      {predictionCategoryLabel(prediction.category)}
+                    </span>
+                  </div>
+                  <h3 className="dossier-pred__title">{prediction.title}</h3>
+                  <p className="dossier-pred__text" title={prediction.text}>
                     {prediction.text}
-                  </span>
+                  </p>
                 </li>
               ))}
             </ul>

@@ -10,8 +10,12 @@ export async function SiteNav() {
       <div className="dex-spectrum" aria-hidden="true" />
       <nav className="nav-term__line" aria-label="Primary">
         <span className="nav-term__cmds">
-          <span className="nav-term__brand">
-            <span className="prompt-mark">&gt;</span> commitdex
+          <span className="nav-term__brand" aria-label="Commitdex home">
+            <span className="nav-term__brand-mark" aria-hidden="true">
+              <span className="prompt-mark">&gt;</span>
+            </span>
+            <span className="nav-term__brand-name">commitdex</span>
+            <span className="nav-term__brand-version">/ v0.1</span>
           </span>
           <Link href="/#classify">--classify</Link>
           <Link href="/wanted">--wanted</Link>

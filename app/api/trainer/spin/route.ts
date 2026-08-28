@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { classifyCommit } from "@/lib/classify";
 import { curateCommits, curateCommitsForSpin } from "@/lib/curate";
-import { allotFeaturedCard, getTrainer, type TrainerRow } from "@/lib/db";
+import { allotFeaturedCard, getTrainer, toPublicTrainer, type TrainerRow } from "@/lib/db";
 import { fetchPublicCommits, normalizeUsername, type GitHubCommit } from "@/lib/github";
+import { sessionMatchesTrainer } from "@/lib/github-auth";
 import { COPY, jsonError, jsonFromError } from "@/lib/public-error";
 import { clientKey, rateLimited } from "@/lib/rate-limit";
 import { evaluateSpinEligibility, isNewUtcDaySince } from "@/lib/spin-eligibility";
@@ -12,7 +14,7 @@ export const maxDuration = 60;
 
 function lockedSpinResponse(trainer: TrainerRow, reel: string[], reason: string) {
   return NextResponse.json({
-    trainer,
+    trainer: toPublicTrainer(trainer),
     card: trainer.featured_card,
     landed: trainer.featured_card?.original_message ?? "",
     reel,
@@ -57,6 +59,15 @@ export async function POST(request: Request) {
   const username = normalizeUsername(raw);
   if (!username) {
     return jsonError(400, COPY.badUsername);
+  }
+
+  const session = await auth();
+  const login = session?.login ?? session?.user?.login;
+  if (!login) {
+    return jsonError(401, COPY.verifyTrainer);
+  }
+  if (!sessionMatchesTrainer(login, username)) {
+    return jsonError(403, COPY.trainerWrongAccount);
   }
 
   if (!process.env.OPENROUTER_API_KEY) {
@@ -129,7 +140,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      trainer: saved.trainer,
+      trainer: toPublicTrainer(saved.trainer),
       card: saved.trainer.featured_card ?? card,
       landed: saved.trainer.featured_card?.original_message ?? landed,
       reel,

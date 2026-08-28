@@ -1,5 +1,11 @@
 import { completeJson } from "./openrouter";
-import { normalizePredictionIcon } from "./prediction-icons";
+import {
+  isPredictionCategoryInput,
+  normalizePredictionCategory,
+  normalizePredictionIcon,
+  normalizePredictionText,
+  normalizePredictionTitle,
+} from "./prediction-icons";
 import { PROFILE_JSON_HINT, PROFILE_SYSTEM_PROMPT } from "./prompts";
 import { clampStat, isCreatureType, type CardStats, type CreatureType } from "./types";
 import type { Prediction } from "./db";
@@ -24,26 +30,32 @@ type RawProfile = {
   predictions?: unknown;
 };
 
-/** Soft-cap punchlines so chips stay short even if the model runs long. */
-function clipPredictionText(text: string): string {
-  const trimmed = text.trim().replace(/\s+/g, " ");
-  if (trimmed.length <= 96) return trimmed;
-  const cut = trimmed.slice(0, 96);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > 48 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
-}
-
+/** Keep generated punchlines short enough for the compact dossier cards. */
 function normalizePredictions(raw: unknown): Prediction[] {
   if (!Array.isArray(raw)) return [];
+  const seenCategories = new Set<string>();
   return raw
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const row = item as { icon?: unknown; text?: unknown };
-      if (typeof row.text !== "string" || row.text.trim().length === 0) return null;
-      return {
+      const row = item as { category?: unknown; title?: unknown; icon?: unknown; text?: unknown };
+      if (typeof row.category !== "string") return null;
+      const rawCategory = row.category.trim().toLowerCase();
+      if (!isPredictionCategoryInput(rawCategory)) return null;
+      // normalizePredictionCategory maps the retired future_patch slug for old model output.
+      const category = normalizePredictionCategory(rawCategory);
+      if (seenCategories.has(category)) {
+        return null;
+      }
+      const text = normalizePredictionText(row.text);
+      if (!text) return null;
+      seenCategories.add(category);
+      const prediction: Prediction = {
+        category,
+        title: normalizePredictionTitle(row.title, category),
         icon: normalizePredictionIcon(row.icon),
-        text: clipPredictionText(row.text),
+        text,
       };
+      return prediction;
     })
     .filter((row): row is Prediction => row !== null)
     .slice(0, 5);

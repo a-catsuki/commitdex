@@ -20,6 +20,8 @@ export const COPY = {
   noCommits: "No public commit messages on file for that trainer.",
   scanFirst: "Scan this trainer before cranking the reel.",
   emptyReel: "The reel is empty. Scan this trainer again.",
+  verifyTrainer: "Verify GitHub to claim this trainer.",
+  trainerWrongAccount: "That trainer belongs to a different GitHub login.",
   alreadyPulledToday: "Already pulled today.",
   noNewSpecimens: "No new specimens since last pull.",
   githubBusy: "GitHub is catching its breath. Wait a minute, then scan again.",
