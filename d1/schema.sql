@@ -33,3 +33,6 @@ CREATE TABLE IF NOT EXISTS commitdex_trainers (
 
 CREATE INDEX IF NOT EXISTS commitdex_trainers_chaos_idx
   ON commitdex_trainers (chaos DESC, computed_at DESC);
+
+CREATE INDEX IF NOT EXISTS commitdex_trainers_wanted_idx
+  ON commitdex_trainers (chaos DESC, computed_at DESC, github_username ASC);

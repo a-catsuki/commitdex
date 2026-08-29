@@ -3,11 +3,12 @@ import type { League } from "./league";
 import type { PhotoMime } from "./photo-store";
 import {
   categoryFromLegacyIcon,
+  hasObviousPredictionSubjectMismatch,
   isPredictionCategoryInput,
-  normalizePredictionIcon,
   normalizePredictionCategory,
   normalizePredictionText,
   normalizePredictionTitle,
+  predictionIconForCategory,
   type PredictionCategory,
   type PredictionIcon,
 } from "./prediction-icons";
@@ -52,6 +53,11 @@ export type TrainerRow = {
   created_at: string;
 };
 
+export type TrainerPlacement = {
+  rank: number;
+  total: number;
+};
+
 type TrainerInsert = Omit<
   TrainerRow,
   "created_at" | "photo_url" | "photo_data" | "photo_updated_at"
@@ -81,8 +87,14 @@ type TrainerRecord = {
   created_at: unknown;
 };
 
+type TrainerPlacementRecord = {
+  placement_rank: unknown;
+  total: unknown;
+};
+
 const TRAINER_COLUMNS =
   "github_username, github_id, avatar_url, persona_title, dominant_type, league, clarity, effort, honesty, chaos, total_commits_analyzed, predictions, sample_messages, reel_commits, featured_card, featured_at, photo_url, photo_data, photo_updated_at, computed_at, created_at";
+const MOST_WANTED_ORDER = "chaos DESC, computed_at DESC, github_username ASC";
 
 function asNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -122,14 +134,17 @@ function normalizeStoredPredictions(value: unknown): Prediction[] {
           ? normalizePredictionCategory(row.category)
           : categoryFromLegacyIcon(row.icon);
       if (seenCategories.has(category)) return null;
+      const title = normalizePredictionTitle(row.title, category);
+      if (hasObviousPredictionSubjectMismatch(category, title, text)) return null;
       seenCategories.add(category);
 
-      return {
+      const prediction: Prediction = {
         category,
-        title: normalizePredictionTitle(row.title, category),
-        ...(row.icon == null ? {} : { icon: normalizePredictionIcon(row.icon) }),
+        title,
+        icon: predictionIconForCategory(category),
         text,
       };
+      return prediction;
     })
     .filter((row): row is Prediction => row !== null)
     .slice(0, 5);
@@ -225,9 +240,41 @@ export async function getTrainer(username: string): Promise<TrainerRow | null> {
   return rows[0] ? mapTrainer(rows[0]) : null;
 }
 
+/**
+ * Rank a trainer using the same Most Wanted ordering: chaos descending,
+ * then most recently computed, then username ascending for deterministic ties.
+ * Only placement metadata is selected; trainer profile fields are not exposed.
+ */
+export async function getTrainerPlacement(username: string): Promise<TrainerPlacement | null> {
+  const rows = await query<TrainerPlacementRecord>(
+    `WITH ranked_trainers AS (
+       SELECT
+         github_username,
+         ROW_NUMBER() OVER (
+           ORDER BY ${MOST_WANTED_ORDER}
+         ) AS placement_rank,
+         COUNT(*) OVER () AS total
+       FROM commitdex_trainers
+     )
+     SELECT placement_rank, total
+     FROM ranked_trainers
+     WHERE github_username = ?
+     LIMIT 1`,
+    [username.toLowerCase()],
+  );
+  if (!rows[0]) return null;
+
+  const rank = asNumber(rows[0].placement_rank);
+  const total = asNumber(rows[0].total);
+  return rank > 0 && total > 0 && rank <= total ? { rank, total } : null;
+}
+
 export async function listWanted(limit = 50): Promise<TrainerRow[]> {
   const rows = await query<TrainerRecord>(
-    `SELECT ${TRAINER_COLUMNS} FROM commitdex_trainers ORDER BY chaos DESC, computed_at DESC LIMIT ?`,
+    `SELECT ${TRAINER_COLUMNS}
+     FROM commitdex_trainers
+     ORDER BY ${MOST_WANTED_ORDER}
+     LIMIT ?`,
     [limit],
   );
   return rows.map(mapTrainer);

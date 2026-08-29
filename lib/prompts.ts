@@ -18,7 +18,7 @@ No markdown. No commentary. No extra keys.`;
 
 export const CARD_JSON_HINT = `{"name":"lowercase 5–13 character species name; pronounceable, rhythmic, semantic hook; no raw word concatenation","type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","rarity":"common|uncommon|rare|legendary|shiny","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"flavor_text":"1–2 punchy Pokedex roast sentences about the energy, not a restatement of the commit"}`;
 
-export const PROFILE_SYSTEM_PROMPT = `Invent a trainer profile from one person's real git commit messages. JSON only.
+export const PROFILE_SYSTEM_PROMPT = `Invent a trainer profile from one person's real git commit messages and timestamps. JSON only.
 
 persona_title: a short original epithet that could only fit THIS batch (messages + timing: nights, weekends, bursts). Do not use stock titles like "the midnight fixer" or "weekend diplomat".
 
@@ -28,16 +28,32 @@ stats 0–100 (clarity, effort, honesty, chaos): spirit of the batch, not a lite
 
 predictions: exactly 3–5 items, each using a distinct category from this allowlist:
 ${predictionCategoryPromptList()}
-Only choose categories supported by the commit batch. Never duplicate a category or invent evidence.
+Only choose categories supported by explicit evidence in this commit batch. Omit a category when its evidence lane is absent. Never duplicate a category, invent evidence, or turn a broad vibe into a category.
 
-title: 2–6 words, an original funny title specific to its category, not a generic horoscope.
+Category contracts (these are hard boundaries):
+- cafe_order / CAFÉ ORDER: one specific drink, order, or customization inferred ONLY from drink, cafe, or caffeine evidence. The title names that order; the punchline jokes about that order.
+- sleep_schedule / SLEEP SCHEDULE: a time-of-day or day pattern proven by commit timestamps. The title names the schedule; the punchline jokes about when commits appear.
+- desk_artifact / DESK ARTIFACT: one concrete object or tool explicitly suggested by a message, such as a cable, keyboard, monitor, or sticky note. The title names that object; the punchline jokes about its role.
+- coding_ritual / CODING RITUAL: a repeated commit verb or workflow such as fix, deploy, refactor, WIP, or hotfix. The title names the ritual; the punchline jokes about the repeated behavior.
+- communication_style / COMMUNICATION STYLE: an actual linguistic pattern such as all-caps, terse, apologetic, vague, or passive-aggressive wording. The title names the style; the punchline jokes about that wording.
+- commit_crime / COMMIT CRIME: one specific funny offense visible in a commit, such as mass deletion, "final final", or a broken deploy. The title names the offense; the punchline jokes about the act.
+- weekend_protocol / WEEKEND PROTOCOL: Saturday/Sunday commit activity only when timestamps support it. The title names the weekend behavior; the punchline jokes about it.
+- song_on_repeat / SONG ON REPEAT: a fictional soundtrack, genre, song, album, or playlist concept based on repeated words, timing, or commit energy. The title must sound song/album/playlist-like; the punchline jokes about that soundtrack. Never claim real listening history.
 
-text: exactly one short sentence, about 8–16 words. Make the joke specific to observed commit words, timing, or patterns. The text itself must provide the grounding, with no evidence field.
+STRICT SAME-SUBJECT TEST: each prediction is one concrete subject. Its category, title, and punchline must all refer to that same subject. The punchline must mention or echo evidence from the commits. If the title is "The Charging Cable", the text must joke about a charging cable, not midnight deploys. Before returning each item, ask: "Could this punchline be attached to this title without changing the subject?" If not, rewrite it or omit the category.
 
-icon: optional decorative slug. If present, use only the category's mapped icon. Never invent other ti-* names.
+title: 2–6 words, concrete and category-specific. Name the order, schedule, object, ritual, style, offense, weekend behavior, or fictional soundtrack—not a generic horoscope.
 
-Use playful "will probably..." framing, not factual claims about the person. Never infer sensitive traits or mention marriage, health, politics, finances, location, or identity. Ground the persona and predictions in the batch.
+text: exactly one short, complete sentence, about 8–16 words. Make it funny and grounded in observed commit words, timestamps, or patterns. Avoid canned "will probably..." horoscope filler; playful framing is welcome when the joke stays specific.
+
+icon: optional decorative slug. If present, use only the mapped icon for that category. Never invent other ti-* names.
+
+Use playful framing, never factual or sensitive claims. Do not infer or mention marriage, health, politics, finances, location, or identity. Do not claim facts outside the batch.
+
+Good examples for structure only—do not copy them:
+{"category":"cafe_order","title":"The Oat Milk Cortado","text":"Every fix gets an oat-milk upgrade before this order ships."}
+{"category":"song_on_repeat","title":"The Hotfix Encore","text":"Repeated hotfixes get a louder chorus whenever midnight rolls around."}
 
 No markdown. No commentary.`;
 
-export const PROFILE_JSON_HINT = `{"dominant_type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","persona_title":"short original epithet","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"predictions":[{"category":"song_on_repeat","title":"The Fix-Commit Mixtape","icon":"ti-music","text":"Will probably replay every fix commit until the deploy chorus finally lands."}]}`;
+export const PROFILE_JSON_HINT = `{"dominant_type":"lazy|vague|panic|overconfident|passive-aggressive|corporate|chaotic|emoji","persona_title":"short original epithet","stats":{"clarity":0,"effort":0,"honesty":0,"chaos":0},"predictions":[{"category":"song_on_repeat","title":"The Hotfix Encore","icon":"ti-music","text":"Repeated hotfixes get a louder chorus whenever midnight rolls around."}]}`;

@@ -6,6 +6,7 @@ import { CommitPrompt } from "@/components/CommitPrompt";
 import { CreatureCard } from "@/components/CreatureCard";
 import { PrintBay } from "@/components/PrintBay";
 import { downloadCardGif, downloadCardPng } from "@/lib/download-card";
+import { NAV_TYPE_EVENT, type NavTypeEventDetail } from "@/lib/nav-spectrum";
 import {
   PRINT_STAGES,
   RITUAL_MS,
@@ -14,7 +15,11 @@ import {
   prefersReducedMotion,
 } from "@/lib/ritual";
 import { SAMPLE_COMMITS } from "@/lib/type-meta";
-import { isCreatureCard, type CreatureCard as CardData } from "@/lib/types";
+import {
+  isCreatureCard,
+  type CreatureCard as CardData,
+  type CreatureType,
+} from "@/lib/types";
 
 type Status = "idle" | "loading" | "error" | "success";
 
@@ -22,6 +27,14 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function dispatchNavType(type: CreatureType | null) {
+  window.dispatchEvent(
+    new CustomEvent<NavTypeEventDetail>(NAV_TYPE_EVENT, {
+      detail: { type },
+    }),
+  );
 }
 
 export function Workbench() {
@@ -49,6 +62,7 @@ export function Workbench() {
     setStatus("loading");
     setError(undefined);
     setCard(null);
+    dispatchNavType(null);
     setStageIndex(0);
 
     const tick = motionOff
@@ -87,6 +101,7 @@ export function Workbench() {
       if (runRef.current !== run) return;
 
       setCard(payload);
+      dispatchNavType(payload.type);
       setStatus("success");
     } catch {
       if (runRef.current !== run) return;

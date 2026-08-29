@@ -89,6 +89,8 @@
   --dur-scan: 1600ms;
   --dur-spark: 1200ms;
   --dur-reel: 2600ms;
+  --dur-spectrum: 980ms;
+  --dur-spectrum-sweep: 4.2s;
   --ticket-w: clamp(7.25rem, 38vw, 9.25rem);
   --ticket-gap: 0.5rem;
   --ticket-stride: calc(var(--ticket-w) + var(--ticket-gap));

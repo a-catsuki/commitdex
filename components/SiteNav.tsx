@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { auth, signIn, signOut } from "@/auth";
+import type { CreatureType } from "@/lib/types";
+import { NavSpectrum } from "@/components/NavSpectrum";
 
-export async function SiteNav() {
+type Props = {
+  type?: CreatureType;
+};
+
+export async function SiteNav({ type }: Props) {
   const session = await auth();
   const login = session?.login?.trim() || null;
 
   return (
     <header className="nav-term">
-      <div className="dex-spectrum" aria-hidden="true" />
+      <NavSpectrum initialType={type} />
       <nav className="nav-term__line" aria-label="Primary">
         <span className="nav-term__cmds">
           <span className="nav-term__brand" aria-label="Commitdex home">
@@ -18,7 +24,7 @@ export async function SiteNav() {
             <span className="nav-term__brand-version">/ v0.1</span>
           </span>
           <Link href="/#classify">--classify</Link>
-          <Link href="/wanted">--wanted</Link>
+          <Link href="/wanted">--bounties</Link>
         </span>
         {login ? (
           <span className="nav-term__auth">

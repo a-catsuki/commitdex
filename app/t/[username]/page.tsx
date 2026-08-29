@@ -10,7 +10,7 @@ import { TrainerRadar } from "@/components/TrainerRadar";
 import { TrainerScan } from "@/components/TrainerScan";
 import { TypeChip } from "@/components/TypeChip";
 import { curateCommitsForSpin } from "@/lib/curate";
-import { getTrainer, trainerPhotoSrc } from "@/lib/db";
+import { getTrainer, getTrainerPlacement, trainerPhotoSrc, type TrainerPlacement } from "@/lib/db";
 import { fetchPublicCommits } from "@/lib/github";
 import { LEAGUE_LABEL } from "@/lib/league";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
@@ -46,6 +46,10 @@ function spinStatusLabel(
   return "PICK LOCKED UNTIL TOMORROW";
 }
 
+/** Percentile placement uses ceil(rank / total * 100), clamped to 1–100. */
+function placementPercentile({ rank, total }: TrainerPlacement): number {
+  return Math.min(100, Math.max(1, Math.ceil((rank / total) * 100)));
+}
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { username } = await params;
@@ -73,7 +77,16 @@ export default async function TrainerPage({ params }: PageProps) {
   }
   if (!trainer) notFound();
 
+  let placement: TrainerPlacement | null = null;
+  try {
+    placement = await getTrainerPlacement(trainer.github_username);
+  } catch {
+    // Placement is supplemental metadata; keep the dossier usable if ranking is unavailable.
+    placement = null;
+  }
+
   const type = isCreatureType(trainer.dominant_type) ? trainer.dominant_type : "chaotic";
+  const navType = trainer.featured_card?.type ?? type;
   let reel =
     trainer.reel_commits.length > 0 ? trainer.reel_commits : trainer.sample_messages;
   let canSpin = !trainer.featured_card;
@@ -117,10 +130,12 @@ export default async function TrainerPage({ params }: PageProps) {
   const showBooth = Boolean(trainer.featured_card);
   const hasSpecimen =
     Boolean(trainer.featured_card) || reel.length > 0;
+  const placementLabel = placement ? `#${placement.rank} MOST WANTED` : "UNRANKED";
+  const percentileLabel = placement ? `TOP ${placementPercentile(placement)}%` : "—";
 
   return (
     <>
-      <SiteNav />
+      <SiteNav type={navType} />
       <main className="dossier">
         <p className="dossier__crumb">
           <Link href="/wanted">Most Wanted</Link>
@@ -144,7 +159,12 @@ export default async function TrainerPage({ params }: PageProps) {
                 />
               ) : null}
               <div className="dossier__id">
-                <p className="dossier__handle">@{trainer.github_username}</p>
+                <div className="dossier__handle-line">
+                  <p className="dossier__handle">@{trainer.github_username}</p>
+                  <span className="dossier-rank-badge" aria-label={`Leaderboard rank: ${placementLabel}`}>
+                    {placementLabel}
+                  </span>
+                </div>
                 <h1 className="dossier__title">{trainer.persona_title}</h1>
                 <p className="dossier__badges">
                   <TypeChip type={type} />
@@ -163,9 +183,17 @@ export default async function TrainerPage({ params }: PageProps) {
 
           <section className="dossier-tile dossier-tile--league" aria-label="League">
             <p className="dossier-hud__label">LEAGUE</p>
-            <p className="dossier-hud__league" data-league={trainer.league}>
-              {LEAGUE_LABEL[trainer.league]}
-            </p>
+            <div className="dossier-hud__league-row">
+              <p className="dossier-hud__league" data-league={trainer.league}>
+                {LEAGUE_LABEL[trainer.league]}
+              </p>
+              <span
+                className="dossier-placement-badge"
+                aria-label={`Leaderboard percentile: ${percentileLabel}`}
+              >
+                {percentileLabel}
+              </span>
+            </div>
           </section>
 
           <section
@@ -252,16 +280,22 @@ export default async function TrainerPage({ params }: PageProps) {
             </div>
             <ul className="dossier-preds">
               {trainer.predictions.map((prediction, i) => (
-                <li key={`${prediction.category}-${i}`} className="dossier-pred">
+                <li
+                  key={`${prediction.category}-${i}`}
+                  className="dossier-pred"
+                  data-category={prediction.category}
+                >
                   <div className="dossier-pred__topline">
                     <span className="dossier-pred__icon" aria-hidden="true">
                       {predictionCategorySymbol(prediction.category)}
                     </span>
-                    <span className="dossier-pred__tag">
-                      {predictionCategoryLabel(prediction.category)}
-                    </span>
+                    <div className="dossier-pred__heading">
+                      <span className="dossier-pred__tag">
+                        {predictionCategoryLabel(prediction.category)}
+                      </span>
+                      <h3 className="dossier-pred__title">{prediction.title}</h3>
+                    </div>
                   </div>
-                  <h3 className="dossier-pred__title">{prediction.title}</h3>
                   <p className="dossier-pred__text" title={prediction.text}>
                     {prediction.text}
                   </p>

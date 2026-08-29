@@ -1,10 +1,11 @@
 import { completeJson } from "./openrouter";
 import {
+  hasObviousPredictionSubjectMismatch,
   isPredictionCategoryInput,
   normalizePredictionCategory,
-  normalizePredictionIcon,
   normalizePredictionText,
   normalizePredictionTitle,
+  predictionIconForCategory,
 } from "./prediction-icons";
 import { PROFILE_JSON_HINT, PROFILE_SYSTEM_PROMPT } from "./prompts";
 import { clampStat, isCreatureType, type CardStats, type CreatureType } from "./types";
@@ -30,8 +31,79 @@ type RawProfile = {
   predictions?: unknown;
 };
 
+const DRINK_EVIDENCE = /\b(?:caf[eé]|coffee|caffeine|espresso|latte|cappuccino|americano|mocha|tea|brew|oat milk|drink)\b/i;
+const DESK_OBJECT_EVIDENCE =
+  /\b(?:cable|keyboard|monitor|sticky note|mouse|screen|charger|headphones?|usb|desk|laptop)\b/i;
+const CODING_WORKFLOW = /\b(?:fix|deploy|refactor|wip|hotfix|revert|merge|release|patch)\b/i;
+const CRIME_EVIDENCE =
+  /\b(?:mass deletion|delete all|deleted|force[- ]?push|oops|broken deploy|final[- ]final|do not merge|don't merge)\b/i;
+const COMMUNICATION_EVIDENCE =
+  /\b(?:all[- ]?caps|uppercase|terse|apolog(?:y|ize|etic)|sorry|please|vague|passive[- ]aggressive|emoji)\b/i;
+
+function hasRepeatedMatch(messages: string[], pattern: RegExp): boolean {
+  return messages.filter((message) => pattern.test(message)).length >= 2;
+}
+
+function hasSleepEvidence(commits: GitHubCommit[]): boolean {
+  const buckets = new Map<string, number>();
+  for (const commit of commits) {
+    const date = new Date(commit.committedAt);
+    if (Number.isNaN(date.getTime())) continue;
+    const hour = date.getUTCHours();
+    const bucket = hour < 5 ? "late-night" : hour < 9 ? "early-morning" : hour >= 22 ? "late-night" : "day";
+    buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1);
+  }
+  return (buckets.get("late-night") ?? 0) >= 2 || (buckets.get("early-morning") ?? 0) >= 2;
+}
+
+function hasCommunicationEvidence(messages: string[]): boolean {
+  const allCaps = messages.filter((message) => {
+    const letters = message.replace(/[^A-Za-z]/g, "");
+    return letters.length >= 4 && letters === letters.toUpperCase();
+  }).length;
+  const terse = messages.filter((message) => message.trim().split(/\s+/).length <= 3).length;
+  return allCaps >= 2 || terse >= 2 || hasRepeatedMatch(messages, COMMUNICATION_EVIDENCE);
+}
+
+function hasSongEvidence(commits: GitHubCommit[]): boolean {
+  const words = new Map<string, number>();
+  for (const commit of commits) {
+    for (const word of commit.message.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []) {
+      words.set(word, (words.get(word) ?? 0) + 1);
+    }
+  }
+  return [...words.values()].some((count) => count >= 2) || commits.length >= 3;
+}
+
+function hasCategoryEvidence(category: string, commits: GitHubCommit[]): boolean {
+  const messages = commits.map((commit) => commit.message);
+  switch (category) {
+    case "cafe_order":
+      return messages.some((message) => DRINK_EVIDENCE.test(message));
+    case "sleep_schedule":
+      return hasSleepEvidence(commits);
+    case "desk_artifact":
+      return messages.some((message) => DESK_OBJECT_EVIDENCE.test(message));
+    case "coding_ritual":
+      return hasRepeatedMatch(messages, CODING_WORKFLOW);
+    case "communication_style":
+      return hasCommunicationEvidence(messages);
+    case "commit_crime":
+      return messages.some((message) => CRIME_EVIDENCE.test(message));
+    case "weekend_protocol":
+      return commits.some((commit) => {
+        const date = new Date(commit.committedAt);
+        return !Number.isNaN(date.getTime()) && [0, 6].includes(date.getUTCDay());
+      });
+    case "song_on_repeat":
+      return hasSongEvidence(commits);
+    default:
+      return false;
+  }
+}
+
 /** Keep generated punchlines short enough for the compact dossier cards. */
-function normalizePredictions(raw: unknown): Prediction[] {
+function normalizePredictions(raw: unknown, commits: GitHubCommit[]): Prediction[] {
   if (!Array.isArray(raw)) return [];
   const seenCategories = new Set<string>();
   return raw
@@ -46,13 +118,16 @@ function normalizePredictions(raw: unknown): Prediction[] {
       if (seenCategories.has(category)) {
         return null;
       }
+      if (!hasCategoryEvidence(category, commits)) return null;
       const text = normalizePredictionText(row.text);
       if (!text) return null;
+      const title = normalizePredictionTitle(row.title, category);
+      if (hasObviousPredictionSubjectMismatch(category, title, text)) return null;
       seenCategories.add(category);
       const prediction: Prediction = {
         category,
-        title: normalizePredictionTitle(row.title, category),
-        icon: normalizePredictionIcon(row.icon),
+        title,
+        icon: predictionIconForCategory(category),
         text,
       };
       return prediction;
@@ -61,7 +136,7 @@ function normalizePredictions(raw: unknown): Prediction[] {
     .slice(0, 5);
 }
 
-function normalizeProfile(raw: RawProfile): ProfileDraft {
+function normalizeProfile(raw: RawProfile, commits: GitHubCommit[]): ProfileDraft {
   const type =
     typeof raw.dominant_type === "string" && isCreatureType(raw.dominant_type)
       ? raw.dominant_type
@@ -70,7 +145,7 @@ function normalizeProfile(raw: RawProfile): ProfileDraft {
     typeof raw.persona_title === "string" && raw.persona_title.trim().length > 0
       ? raw.persona_title.trim().slice(0, 80)
       : "unclassified trainer";
-  const predictions = normalizePredictions(raw.predictions);
+  const predictions = normalizePredictions(raw.predictions, commits);
   if (predictions.length < 3) {
     throw new Error("The model returned too few predictions. Retry the scan.");
   }
@@ -103,5 +178,5 @@ export async function classifyProfile(commits: GitHubCommit[]): Promise<ProfileD
     temperature: 0.95,
   });
 
-  return normalizeProfile(parsed as RawProfile);
+  return normalizeProfile(parsed as RawProfile, commits);
 }

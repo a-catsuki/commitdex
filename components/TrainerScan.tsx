@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DexReel } from "@/components/DexReel";
 import { TRAINER_STAGES } from "@/lib/ritual";
@@ -13,6 +14,8 @@ type ScanPayload = {
   trainer?: { github_username: string; featured_card?: CreatureCard | null };
   reel?: string[];
   saved?: boolean;
+  cached?: boolean;
+  alreadyExists?: boolean;
   locked?: boolean;
   canSpin?: boolean;
   spinLockedReason?: string | null;
@@ -29,6 +32,8 @@ export function TrainerScan() {
   const [featured, setFeatured] = useState<CreatureCard | null>(null);
   const [canSpin, setCanSpin] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showExistingProfile, setShowExistingProfile] = useState(false);
+  const closeExistingProfileRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (status !== "loading") return;
@@ -37,6 +42,16 @@ export function TrainerScan() {
     }, 900);
     return () => window.clearInterval(tick);
   }, [status]);
+
+  useEffect(() => {
+    if (!showExistingProfile) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setShowExistingProfile(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    closeExistingProfileRef.current?.focus();
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showExistingProfile]);
 
   async function scan() {
     const trimmed = username.trim().replace(/^@/, "");
@@ -49,6 +64,7 @@ export function TrainerScan() {
     setFeatured(null);
     setCanSpin(false);
     setSaved(false);
+    setShowExistingProfile(false);
     try {
       const response = await fetch("/api/trainer", {
         method: "POST",
@@ -74,8 +90,10 @@ export function TrainerScan() {
       setCanSpin(nextCanSpin);
       setSaved(payload.saved ?? false);
       setStatus("success");
+      const existingProfile = payload.alreadyExists ?? payload.cached ?? false;
+      setShowExistingProfile(existingProfile);
       // Locked foil: skip reel, open dossier (reason lives on the poster).
-      if (nextFeatured && !nextCanSpin) {
+      if (nextFeatured && !nextCanSpin && !existingProfile) {
         router.push(`/t/${nextHandle}`);
       }
     } catch {
@@ -152,6 +170,43 @@ export function TrainerScan() {
           mode={featured ? "respin" : "first"}
           saved={saved}
         />
+      ) : null}
+      {showExistingProfile && handle ? (
+        <div className="existing-profile-overlay">
+          <button
+            type="button"
+            className="existing-profile-overlay__backdrop"
+            aria-label="Close existing trainer notice"
+            onClick={() => setShowExistingProfile(false)}
+          />
+          <section
+            className="existing-profile"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="existing-profile-title"
+            aria-describedby="existing-profile-copy"
+          >
+            <p className="existing-profile__kicker">DEX ALERT // MATCH FOUND</p>
+            <h2 id="existing-profile-title">TRAINER ALREADY IN THE DEX</h2>
+            <p id="existing-profile-copy" className="existing-profile__copy">
+              That handle already has a public dossier. The evidence is warmed up.
+            </p>
+            <p className="existing-profile__handle">@{handle}</p>
+            <div className="existing-profile__actions">
+              <Link className="btn" href={`/t/${encodeURIComponent(handle)}`}>
+                VIEW PROFILE
+              </Link>
+              <button
+                ref={closeExistingProfileRef}
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setShowExistingProfile(false)}
+              >
+                CLOSE
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </section>
   );

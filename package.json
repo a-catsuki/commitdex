@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:photobooth": "node --experimental-strip-types --test scripts/photobooth-coordinates.test.mjs"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@tensorflow/tfjs": "^4.22.0",
     "@vercel/analytics": "^2.0.1",
     "gifenc": "^1.0.3",

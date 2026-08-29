@@ -3,6 +3,7 @@ import { GIFEncoder, applyPalette, quantize } from "gifenc";
 
 export async function downloadCardPng(node: HTMLElement, filename: string) {
   await document.fonts.ready;
+  await waitForBrowser();
   const dataUrl = await toPng(node, {
     pixelRatio: 2,
     cacheBust: true,
@@ -26,8 +27,30 @@ const GIF_HEIGHT = 504;
 
 function waitForBrowser(): Promise<void> {
   return new Promise((resolve) => {
-    window.setTimeout(resolve, 0);
+    if (typeof window.requestAnimationFrame !== "function") {
+      window.setTimeout(resolve, 0);
+      return;
+    }
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
   });
+}
+
+async function waitForStage(root: HTMLDivElement) {
+  const images = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
+  await Promise.all(
+    images.map((image) => {
+      if (image.complete) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      });
+    }),
+  );
+  await waitForBrowser();
+  const { width, height } = root.getBoundingClientRect();
+  if (width < 1 || height < 1) {
+    throw new Error("The card export stage could not be laid out.");
+  }
 }
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
@@ -57,6 +80,7 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 }
 
 type ExportStage = {
+  host: HTMLDivElement;
   root: HTMLDivElement;
   back: HTMLDivElement;
   front: HTMLDivElement;
@@ -70,21 +94,55 @@ function freezeAnimations(root: HTMLElement) {
   }
 }
 
-function createExportStage(node: HTMLElement): ExportStage {
-  const root = document.createElement("div");
+function getOpaqueBackground(): string {
   const rootStyle = getComputedStyle(document.documentElement);
-  const background =
-    rootStyle.getPropertyValue("--color-paper").trim() || rootStyle.backgroundColor || "#0d1d17";
+  const paper = rootStyle.getPropertyValue("--color-paper").trim();
+  const fallback = "#0d1d17";
+  const candidates = [paper, getComputedStyle(document.body).backgroundColor, fallback];
+  const probe = document.createElement("div");
+  probe.style.position = "absolute";
+  probe.style.width = "1px";
+  probe.style.height = "1px";
+  document.body.append(probe);
+
+  try {
+    for (const candidate of candidates) {
+      probe.style.backgroundColor = candidate;
+      if (probe.style.backgroundColor && probe.style.backgroundColor !== "transparent") {
+        return candidate;
+      }
+    }
+  } finally {
+    probe.remove();
+  }
+
+  return fallback;
+}
+
+function createExportStage(node: HTMLElement): ExportStage {
+  const background = getOpaqueBackground();
+  const host = document.createElement("div");
+  const root = document.createElement("div");
+  host.style.position = "fixed";
+  host.style.left = "-10000px";
+  host.style.top = "0";
+  host.style.width = "1px";
+  host.style.height = "1px";
+  host.style.overflow = "hidden";
+  host.style.pointerEvents = "none";
+  host.style.zIndex = "-1";
+
   root.setAttribute("aria-hidden", "true");
-  root.style.position = "fixed";
-  root.style.left = "-100000px";
+  root.style.position = "relative";
+  root.style.left = "0";
   root.style.top = "0";
   root.style.width = `${GIF_WIDTH}px`;
   root.style.height = `${GIF_HEIGHT}px`;
+  root.style.boxSizing = "border-box";
   root.style.overflow = "hidden";
   root.style.backgroundColor = background;
   root.style.pointerEvents = "none";
-  root.style.zIndex = "-1";
+  root.style.zIndex = "0";
 
   const scene = document.createElement("div");
   scene.style.position = "relative";
@@ -131,9 +189,10 @@ function createExportStage(node: HTMLElement): ExportStage {
   freezeAnimations(front);
   scene.append(back, front);
   root.append(scene);
-  document.body.append(root);
+  host.append(root);
+  document.body.append(host);
 
-  return { root, back, front };
+  return { host, root, back, front };
 }
 
 function applyOpeningFrame(stage: ExportStage, frame: OpeningFrame) {
@@ -154,14 +213,21 @@ function applyOpeningFrame(stage: ExportStage, frame: OpeningFrame) {
 }
 
 async function captureStage(root: HTMLDivElement, background: string): Promise<Uint8Array> {
+  await waitForStage(root);
+  await waitForBrowser();
   const dataUrl = await toPng(root, {
     width: GIF_WIDTH,
     height: GIF_HEIGHT,
     canvasWidth: GIF_WIDTH,
     canvasHeight: GIF_HEIGHT,
     pixelRatio: 1,
-    backgroundColor: background,
     cacheBust: true,
+    style: {
+      position: "relative",
+      left: "0",
+      top: "0",
+      transform: "none",
+    },
   });
   const image = await loadImage(dataUrl);
   const canvas = document.createElement("canvas");
@@ -169,6 +235,16 @@ async function captureStage(root: HTMLDivElement, background: string): Promise<U
   canvas.height = GIF_HEIGHT;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("GIF export is not supported in this browser.");
+
+  context.clearRect(0, 0, GIF_WIDTH, GIF_HEIGHT);
+  context.drawImage(image, 0, 0, GIF_WIDTH, GIF_HEIGHT);
+  const capturedPixels = context.getImageData(0, 0, GIF_WIDTH, GIF_HEIGHT).data;
+  const hasVisiblePixels = capturedPixels.some(
+    (value, index) => index % 4 !== 3 && value > 8,
+  );
+  if (!hasVisiblePixels) {
+    throw new Error("The card image was blank and could not be exported.");
+  }
 
   context.fillStyle = background;
   context.fillRect(0, 0, GIF_WIDTH, GIF_HEIGHT);
@@ -235,6 +311,6 @@ export async function downloadCardGif(
     new Uint8Array(blobBytes).set(bytes);
     triggerBlobDownload(new Blob([blobBytes], { type: "image/gif" }), safeFilename(filename));
   } finally {
-    stage.root.remove();
+    stage.host.remove();
   }
 }

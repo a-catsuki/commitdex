@@ -21,7 +21,7 @@ export type PredictionIconMeta = {
   label: string;
   /** Single decorative glyph for the compact dossier card. */
   symbol: string;
-  /** What evidence belongs in this category. */
+  /** The narrow evidence boundary for this category. */
   meaning: string;
   /** Safe title when rendering a legacy prediction without a generated title. */
   fallbackTitle: string;
@@ -33,56 +33,56 @@ export const PREDICTION_CATEGORIES = [
     icon: "ti-coffee",
     label: "CAFÉ ORDER",
     symbol: "☕",
-    meaning: "coffee, cafe orders, caffeine, espresso, oat milk, or drink rituals",
-    fallbackTitle: "The House Blend Order",
+    meaning: "one specific drink, cafe order, or customization, only when drink/caffeine evidence appears",
+    fallbackTitle: "The Espresso Order",
   },
   {
     category: "sleep_schedule",
     icon: "ti-moon",
     label: "SLEEP SCHEDULE",
     symbol: "◔",
-    meaning: "late-night, midnight, early-morning, or timestamp patterns",
-    fallbackTitle: "The Midnight Scheduler",
+    meaning: "a time-of-day or day pattern proven by commit timestamps",
+    fallbackTitle: "The 2AM Schedule",
   },
   {
     category: "desk_artifact",
     icon: "ti-keyboard",
     label: "DESK ARTIFACT",
     symbol: "▣",
-    meaning: "keyboard, monitor, sticky note, cable, or other desk-object jokes",
-    fallbackTitle: "The Peripheral Witness",
+    meaning: "one concrete object or tool explicitly suggested by a commit message",
+    fallbackTitle: "The Charging Cable",
   },
   {
     category: "coding_ritual",
     icon: "ti-bolt",
     label: "CODING RITUAL",
     symbol: "ϟ",
-    meaning: "repeated fix, WIP, deploy, refactor, revert, or commit-burst habits",
-    fallbackTitle: "The Ritual Maintainer",
+    meaning: "a repeated commit verb or workflow such as fix, deploy, refactor, WIP, or hotfix",
+    fallbackTitle: "The Fix Deploy Ritual",
   },
   {
     category: "communication_style",
     icon: "ti-briefcase",
     label: "COMMUNICATION STYLE",
     symbol: "✉",
-    meaning: "terse, all-caps, passive-aggressive, emoji, or unusually formal wording",
-    fallbackTitle: "The Tone Operations Lead",
+    meaning: "an actual wording pattern such as all-caps, terse, apologetic, vague, or barbed",
+    fallbackTitle: "The Terse Commit Style",
   },
   {
     category: "commit_crime",
     icon: "ti-flame",
     label: "COMMIT CRIME",
     symbol: "⚠",
-    meaning: "the funniest specific offense in the actual repo or commit messages",
-    fallbackTitle: "The Evidence Room Regular",
+    meaning: "one specific funny offense visible in a commit, such as mass deletion or final-final",
+    fallbackTitle: "The Final-Final Offense",
   },
   {
     category: "weekend_protocol",
     icon: "ti-clock",
     label: "WEEKEND PROTOCOL",
     symbol: "⌁",
-    meaning: "Saturday or Sunday activity only when the timestamps show it",
-    fallbackTitle: "The Weekend Custodian",
+    meaning: "Saturday or Sunday commit behavior, only when timestamps prove weekend activity",
+    fallbackTitle: "The Saturday Shift",
   },
   {
     category: "song_on_repeat",
@@ -90,8 +90,8 @@ export const PREDICTION_CATEGORIES = [
     label: "SONG ON REPEAT",
     symbol: "♫",
     meaning:
-      "a playful repeat-listen or soundtrack vibe suggested by commit wording, timing, or recurring patterns",
-    fallbackTitle: "The Commit Mixtape",
+      "a fictional song, album, playlist, or genre concept based on repeated words, timing, or commit energy",
+    fallbackTitle: "The Commit Soundtrack",
   },
 ] as const satisfies readonly PredictionIconMeta[];
 
@@ -122,6 +122,17 @@ const LEGACY_ICON_CATEGORY: Record<string, PredictionCategory> = {
 export const DEFAULT_PREDICTION_CATEGORY: PredictionCategory = "commit_crime";
 export const DEFAULT_PREDICTION_ICON: PredictionIcon = "ti-flame";
 export const DEFAULT_PREDICTION_LABEL = "COMMIT CRIME";
+
+const SUBJECT_CUE_PATTERNS: Record<PredictionCategory, RegExp> = {
+  cafe_order: /\b(?:caf[eé]|coffee|caffeine|espresso|latte|cappuccino|americano|mocha|tea|brew|oat milk|drink)\b/i,
+  sleep_schedule: /\b(?:midnight|late[- ]night|after dark|dawn|early morning|2\s*a\.?m\.?|3\s*a\.?m\.?|sleep|nocturnal)\b/i,
+  desk_artifact: /\b(?:cable|keyboard|monitor|sticky note|mouse|screen|charger|headphones?|usb|desk|laptop)\b/i,
+  coding_ritual: /\b(?:fix|deploy|refactor|hotfix|wip|merge|release|commit|patch|revert)\b/i,
+  communication_style: /\b(?:all[- ]?caps|uppercase|terse|apolog(?:y|ize|etic)|sorry|please|vague|passive[- ]aggressive|emoji)\b/i,
+  commit_crime: /\b(?:mass deletion|delete all|deleted|force[- ]?push|oops|broken deploy|final[- ]final|do not merge|don't merge)\b/i,
+  weekend_protocol: /\b(?:weekend|saturday|sunday)\b/i,
+  song_on_repeat: /\b(?:song|album|playlist|mixtape|soundtrack|track|chorus|verse|remix|anthem|encore|radio)\b/i,
+};
 
 export function isPredictionCategory(raw: string): raw is PredictionCategory {
   return CATEGORY_BY_SLUG.has(raw);
@@ -175,6 +186,35 @@ export function normalizePredictionIcon(raw: unknown): PredictionIcon {
     return withPrefix as PredictionIcon;
   }
   return DEFAULT_PREDICTION_ICON;
+}
+
+function subjectCueCategories(value: string): PredictionCategory[] {
+  return PREDICTION_CATEGORIES.filter((row) => SUBJECT_CUE_PATTERNS[row.category].test(value))
+    .map((row) => row.category)
+    .filter((category) => category !== "song_on_repeat");
+}
+
+/**
+ * Reject only an unambiguous title/punchline subject swap. Most creative or
+ * metaphorical wording deliberately passes through unchanged.
+ */
+export function hasObviousPredictionSubjectMismatch(
+  category: string,
+  title: string,
+  text: string,
+): boolean {
+  const normalizedCategory = normalizePredictionCategory(category);
+  const titleCategories = subjectCueCategories(title);
+  const textCategories = subjectCueCategories(text);
+  if (normalizedCategory === "song_on_repeat" || titleCategories.length === 0 || textCategories.length === 0) {
+    return false;
+  }
+
+  const titleNamesCategory = titleCategories.includes(normalizedCategory);
+  const textNamesCategory = textCategories.includes(normalizedCategory);
+  if (titleNamesCategory && !textNamesCategory) return true;
+  if (textNamesCategory && !titleNamesCategory && titleCategories.length === 1) return true;
+  return titleCategories.length === 1 && textCategories.length === 1 && titleCategories[0] !== textCategories[0];
 }
 
 function cleanText(raw: string): string {

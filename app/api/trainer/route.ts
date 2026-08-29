@@ -59,6 +59,7 @@ export async function POST(request: Request) {
 
   try {
     const existing = await getTrainer(username);
+    const alreadyExists = Boolean(existing);
     const fresh =
       existing && Date.now() - new Date(existing.computed_at).getTime() < CACHE_MS;
 
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           trainer: toPublicTrainer(existing),
           cached: true,
+          alreadyExists,
           reel,
           saved: true,
           locked: true,
@@ -100,6 +102,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         trainer: toPublicTrainer(existing),
         cached: true,
+        alreadyExists,
         reel: reel.length > 0 ? reel : existing.sample_messages,
         saved: true,
         ...flags,
@@ -153,6 +156,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       trainer: toPublicTrainer(trainer),
       cached: false,
+      alreadyExists,
       reel: trainer.reel_commits,
       saved,
       ...flags,

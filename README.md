@@ -159,3 +159,5 @@ npm run build
 ## Privacy and safety
 
 Trainer scans use public GitHub commit messages and timestamps, not diffs. Profile prompts are grounded in that public batch and are jokes, not surveillance; they should not infer sensitive traits. Mugshots are opt-in, camera access is never forced, and rejected frames do not reach storage because screening happens in the browser first. Keep all secrets out of commits and documentation.
+
+The optional FaceLandmarker uses MediaPipe's browser WASM runtime. Its XNNPACK and OpenGL `INFO`/`WARN` lines are native delegate diagnostics, not app errors; browsers may still print them even though the booth keeps tracker failures in CENTER MODE.
