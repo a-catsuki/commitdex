@@ -98,6 +98,7 @@ function PosterLink({
     <Link
       className="poster"
       href={`/t/${trainer.github_username}`}
+      prefetch={rank <= 3}
       data-type={type}
       data-rank={rank <= 3 ? String(rank) : undefined}
     >

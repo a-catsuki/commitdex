@@ -9,7 +9,7 @@ import { CardPack } from "@/components/CardPack";
 import { CreatureCard } from "@/components/CreatureCard";
 import { hintReelTicket, reelLabel } from "@/lib/curate";
 import { sessionMatchesTrainer } from "@/lib/github-auth";
-import { prefetchNsfwModel, scheduleNsfwPrefetch } from "@/lib/nsfw-client";
+import { prefetchNsfwModel } from "@/lib/nsfw-client";
 import { COPY } from "@/lib/public-error";
 import { prefersReducedMotion } from "@/lib/ritual";
 import { TYPE_META } from "@/lib/type-meta";
@@ -105,11 +105,6 @@ export function DexReel({
   const canCrank = !lockedView && phase !== "spinning" && !card && canClaim;
   const showBoothOffer =
     phase === "printed" && Boolean(card) && !lockedView && !boothDone && !boothOpen;
-
-  useEffect(() => {
-    if (!showBoothOffer || !canBooth) return;
-    return scheduleNsfwPrefetch();
-  }, [showBoothOffer, canBooth]);
 
   const strip = useMemo(() => {
     if (reel.length === 0) return [];

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 const STORAGE_KEY = "commitdex-booted";
-const BOOT_MS = 2200;
+const BOOT_MS = 1500;
 
 function dismissBoot() {
   document.documentElement.removeAttribute("data-boot");

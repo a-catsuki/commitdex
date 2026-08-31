@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { DexReel } from "@/components/DexReel";
 import { DossierDailyPick } from "@/components/DossierDailyPick";
 import { DossierPhotobooth } from "@/components/DossierPhotobooth";
@@ -10,7 +11,12 @@ import { TrainerRadar } from "@/components/TrainerRadar";
 import { TrainerScan } from "@/components/TrainerScan";
 import { TypeChip } from "@/components/TypeChip";
 import { curateCommitsForSpin } from "@/lib/curate";
-import { getTrainer, getTrainerPlacement, trainerPhotoSrc, type TrainerPlacement } from "@/lib/db";
+import {
+  getTrainer,
+  getTrainerPlacement,
+  trainerPhotoSrc,
+  type TrainerPlacement,
+} from "@/lib/db";
 import { fetchPublicCommits } from "@/lib/github";
 import { LEAGUE_LABEL } from "@/lib/league";
 import { modelLabel, OPENROUTER_MODEL } from "@/lib/model";
@@ -33,6 +39,8 @@ const HUD_STATS = [
   ["chaos", "CHA"],
 ] as const;
 
+const getTrainerCached = cache(getTrainer);
+
 /** Short STATUS pill from spin eligibility — never opaque "FOIL LOCKED". */
 function spinStatusLabel(
   hasFeatured: boolean,
@@ -53,7 +61,7 @@ function placementPercentile({ rank, total }: TrainerPlacement): number {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { username } = await params;
-  const trainer = await getTrainer(username).catch(() => null);
+  const trainer = await getTrainerCached(username).catch(() => null);
   if (!trainer) {
     return { title: `@${username} — Commitdex` };
   }
@@ -69,21 +77,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function TrainerPage({ params }: PageProps) {
   const { username } = await params;
-  let trainer;
-  try {
-    trainer = await getTrainer(username);
-  } catch {
-    trainer = null;
-  }
+  const [trainer, placement] = await Promise.all([
+    getTrainerCached(username).catch(() => null),
+    getTrainerPlacement(username).catch(() => null),
+  ]);
   if (!trainer) notFound();
-
-  let placement: TrainerPlacement | null = null;
-  try {
-    placement = await getTrainerPlacement(trainer.github_username);
-  } catch {
-    // Placement is supplemental metadata; keep the dossier usable if ranking is unavailable.
-    placement = null;
-  }
 
   const type = isCreatureType(trainer.dominant_type) ? trainer.dominant_type : "chaotic";
   const navType = trainer.featured_card?.type ?? type;

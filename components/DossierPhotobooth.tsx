@@ -2,9 +2,9 @@
 
 import dynamic from "next/dynamic";
 import { useSession, signIn } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { sessionMatchesTrainer } from "@/lib/github-auth";
-import { prefetchNsfwModel, scheduleNsfwPrefetch } from "@/lib/nsfw-client";
+import { prefetchNsfwModel } from "@/lib/nsfw-client";
 import { COPY } from "@/lib/public-error";
 
 const Photobooth = dynamic(
@@ -27,11 +27,6 @@ export function DossierPhotobooth({
   const login = session?.login;
   const canBooth = sessionMatchesTrainer(login, username);
   const label = existingPhotoUrl ? "retake mugshot" : "add mugshot";
-
-  useEffect(() => {
-    if (!canBooth) return;
-    return scheduleNsfwPrefetch();
-  }, [canBooth]);
 
   if (status === "loading") {
     return (

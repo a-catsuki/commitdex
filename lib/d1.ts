@@ -24,6 +24,7 @@ type SqliteGlobal = {
 
 const CF_API = "https://api.cloudflare.com/client/v4";
 const sqliteGlobal = globalThis as typeof globalThis & SqliteGlobal;
+let schemaPromise: Promise<void> | null = null;
 
 export function isRemoteD1Configured(): boolean {
   return Boolean(
@@ -173,7 +174,13 @@ export async function query<T extends Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  await ensureSchema();
+  if (!schemaPromise) {
+    schemaPromise = ensureSchema().catch((error) => {
+      schemaPromise = null;
+      throw error;
+    });
+  }
+  await schemaPromise;
   const rows = isRemoteD1Configured() ? await d1Http(sql, params) : runLocal(sql, params);
   return rows as T[];
 }

@@ -1,7 +1,5 @@
-import { toPng } from "html-to-image";
-import { GIFEncoder, applyPalette, quantize } from "gifenc";
-
 export async function downloadCardPng(node: HTMLElement, filename: string) {
+  const { toPng } = await import("html-to-image");
   await document.fonts.ready;
   await waitForBrowser();
   const dataUrl = await toPng(node, {
@@ -212,7 +210,11 @@ function applyOpeningFrame(stage: ExportStage, frame: OpeningFrame) {
   active.style.filter = "drop-shadow(0 0.5rem 0.8rem rgba(0, 0, 0, 0.42))";
 }
 
-async function captureStage(root: HTMLDivElement, background: string): Promise<Uint8Array> {
+async function captureStage(
+  root: HTMLDivElement,
+  background: string,
+  toPng: typeof import("html-to-image")["toPng"],
+): Promise<Uint8Array> {
   await waitForStage(root);
   await waitForBrowser();
   const dataUrl = await toPng(root, {
@@ -261,6 +263,10 @@ export async function downloadCardGif(
     throw new Error("GIF export is not supported in this browser.");
   }
 
+  const [{ toPng }, { GIFEncoder, applyPalette, quantize }] = await Promise.all([
+    import("html-to-image"),
+    import("gifenc"),
+  ]);
   await document.fonts.ready;
   const stage = createExportStage(node);
   const background = getComputedStyle(stage.root).backgroundColor || "#0d1d17";
@@ -285,7 +291,7 @@ export async function downloadCardGif(
     const pixels: Uint8Array[] = [];
     for (const frame of frames) {
       applyOpeningFrame(stage, frame);
-      pixels.push(await captureStage(stage.root, background));
+      pixels.push(await captureStage(stage.root, background, toPng));
       await waitForBrowser();
     }
 
