@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { DexReel } from "@/components/DexReel";
+import { GitHubProfileLink } from "@/components/GitHubProfileLink";
 import { DossierDailyPick } from "@/components/DossierDailyPick";
 import { DossierPhotobooth } from "@/components/DossierPhotobooth";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -163,6 +164,7 @@ export default async function TrainerPage({ params }: PageProps) {
                     {placementLabel}
                   </span>
                 </div>
+                <GitHubProfileLink username={trainer.github_username} variant="dossier" />
                 <h1 className="dossier__title">{trainer.persona_title}</h1>
                 <p className="dossier__badges">
                   <TypeChip type={type} />

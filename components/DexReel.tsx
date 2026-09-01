@@ -9,6 +9,7 @@ import { CardPack } from "@/components/CardPack";
 import { CreatureCard } from "@/components/CreatureCard";
 import { hintReelTicket, reelLabel } from "@/lib/curate";
 import { sessionMatchesTrainer } from "@/lib/github-auth";
+import { setPendingClaim } from "@/lib/pending-claim";
 import { prefetchNsfwModel } from "@/lib/nsfw-client";
 import { COPY } from "@/lib/public-error";
 import { prefersReducedMotion } from "@/lib/ritual";
@@ -348,11 +349,12 @@ export function DexReel({
               <button
                 type="button"
                 className="btn"
-                onClick={() =>
+                onClick={() => {
+                  setPendingClaim(username);
                   void signIn("github", {
                     redirectTo: typeof window !== "undefined" ? window.location.href : "/",
-                  })
-                }
+                  });
+                }}
                 disabled={busy || reel.length === 0}
               >
                 {login ? "CLAIM THIS TRAINER" : "VERIFY GITHUB TO CRANK"}
@@ -392,12 +394,13 @@ export function DexReel({
                     <button
                       type="button"
                       className="btn"
-                      onClick={() =>
+                      onClick={() => {
+                        setPendingClaim(username);
                         void signIn("github", {
                           redirectTo:
                             typeof window !== "undefined" ? window.location.href : "/",
-                        })
-                      }
+                        });
+                      }}
                     >
                       Verify with GitHub
                     </button>

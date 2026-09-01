@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDeferredValue, useId, useMemo, useState } from "react";
+import { GitHubProfileLink } from "@/components/GitHubProfileLink";
 import { LeagueBadge } from "@/components/LeagueBadge";
 import { TypeChip } from "@/components/TypeChip";
 import { LEAGUE_LABEL, type League } from "@/lib/league";
@@ -95,36 +96,41 @@ function PosterLink({
   const rankLabel = String(rank).padStart(2, "0");
 
   return (
-    <Link
-      className="poster"
-      href={`/t/${trainer.github_username}`}
-      prefetch={rank <= 3}
-      data-type={type}
-      data-rank={rank <= 3 ? String(rank) : undefined}
-    >
-      <span className="poster__rank" aria-label={`Rank ${rank}`}>
-        {rankLabel}
-      </span>
-      <PosterMug
-        avatarUrl={trainer.avatar_url}
-        photoUrl={trainer.photo_url}
-        size={56}
-      />
-      <span className="poster__body">
-        <span className="poster__name">@{trainer.github_username}</span>
-        <span className="poster__title">{trainer.persona_title}</span>
-        <span className="poster__meta">
-          <TypeChip type={type} />
-          <LeagueBadge league={trainer.league} />
-          <span className="chaos-pip">chaos {trainer.chaos}</span>
-          {trainer.featured_name ? (
-            <span className="poster__foil">{trainer.featured_name}</span>
-          ) : (
-            <span className="poster__foil poster__foil--empty">no foil</span>
-          )}
+    <div className="poster-shell">
+      <Link
+        className="poster"
+        href={`/t/${trainer.github_username}`}
+        prefetch={rank <= 3}
+        data-type={type}
+        data-rank={rank <= 3 ? String(rank) : undefined}
+      >
+        <span className="poster__rank" aria-label={`Rank ${rank}`}>
+          {rankLabel}
         </span>
-      </span>
-    </Link>
+        <PosterMug
+          avatarUrl={trainer.avatar_url}
+          photoUrl={trainer.photo_url}
+          size={56}
+        />
+        <span className="poster__body">
+          <span className="poster__name">@{trainer.github_username}</span>
+          <span className="poster__title">{trainer.persona_title}</span>
+          <span className="poster__meta">
+            <TypeChip type={type} />
+            <LeagueBadge league={trainer.league} />
+            <span className="chaos-pip">chaos {trainer.chaos}</span>
+            {trainer.featured_name ? (
+              <span className="poster__foil">{trainer.featured_name}</span>
+            ) : (
+              <span className="poster__foil poster__foil--empty">no foil</span>
+            )}
+          </span>
+        </span>
+      </Link>
+      <div className="github-ext-footer">
+        <GitHubProfileLink username={trainer.github_username} variant="poster" />
+      </div>
+    </div>
   );
 }
 
@@ -141,12 +147,13 @@ function BulletinPoster({
   const caseId = String(place).padStart(2, "0");
 
   return (
-    <Link
-      className="bulletin-poster"
-      href={`/t/${trainer.github_username}`}
-      data-type={type}
-      data-place={place}
-    >
+    <div className="bulletin-poster-shell">
+      <Link
+        className="bulletin-poster"
+        href={`/t/${trainer.github_username}`}
+        data-type={type}
+        data-place={place}
+      >
       <span className="bulletin-poster__scan" aria-hidden="true" />
       {place === 1 ? (
         <span className="bulletin-poster__foil" aria-hidden="true" />
@@ -193,7 +200,11 @@ function BulletinPoster({
         <TypeChip type={type} />
         <LeagueBadge league={trainer.league} />
       </span>
-    </Link>
+      </Link>
+      <div className="github-ext-footer">
+        <GitHubProfileLink username={trainer.github_username} variant="poster" />
+      </div>
+    </div>
   );
 }
 
