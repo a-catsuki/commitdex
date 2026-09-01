@@ -19,13 +19,17 @@ import {
 import { prefersReducedMotion } from "@/lib/ritual";
 
 const BOOT_SETTLE_MS = 320;
-const SPOTLIGHT_PAD = 8;
-const CARD_GAP = 16;
+const SPOTLIGHT_PAD = 12;
+const CARD_GAP = 20;
 const ARROW_SIZE = 10;
+const ARROW_CLAMP = 32;
 const VIEW_MARGIN = 16;
-const SCROLL_WAIT_MS = 480;
+const SCROLL_MAX_MS = 720;
+const SCROLL_POLL_MS = 48;
+const SCROLL_STABLE_TICKS = 3;
 const TARGET_RETRY_MS = 120;
 const TARGET_RETRIES = 24;
+const NAV_SELECTOR = ".nav-term";
 
 type Placement = "top" | "bottom" | "left" | "right";
 
@@ -38,52 +42,54 @@ type TourStep = {
   route?: string;
   hash?: string;
   placement?: Placement | "auto";
+  critical?: boolean;
 };
 
 const STEPS: TourStep[] = [
   {
-    kicker: "field guide // v0.1",
-    title: "Welcome to the dex",
+    kicker: "commitdex · field guide",
+    title: "Welcome, trainer",
     body:
-      "Commitdex reads commit messages and timestamps — never the diff — then prints collectible creature cards. Two paths: roast one message, or scan a whole GitHub history.",
+      "We read commit messages and timestamps — never the diff — then print collectible creature cards. Roast one message, or scan a whole GitHub history.",
   },
   {
-    kicker: "step 01 // specimen lab",
-    title: "Paste a commit",
+    kicker: "01 · classify",
+    title: "Roast a single commit",
     body:
-      "Use the classifier at the top of home (--classify). Drop any commit message, hit enter, and wait for your roasted creature card. Sample commits work if you are shy.",
-    callout: "Home → paste message → print card",
+      "Drop any commit message into --classify, hit enter, and wait for your card. Sample commits ship pre-loaded if you want a dry run.",
+    callout: "paste → enter → card prints",
     target: "classify",
     route: "/",
     hash: "classify",
     placement: "bottom",
   },
   {
-    kicker: "step 02 // trainer scan",
-    title: "Scan a GitHub username",
+    kicker: "02 · trainer scan",
+    title: "Scan a GitHub handle",
     body:
-      "Scroll to “Scan a trainer” or hit --bounties. Enter a public GitHub handle. We cluster commit messages into a trainer dossier and preview your chaos score.",
-    callout: "Public repos only · preview is free",
+      "Enter a public username below. We cluster commits into a trainer dossier and preview your chaos score — free, but it won't stick until you claim.",
+    callout: "public repos only · preview is free",
     target: "scan",
     route: "/",
     hash: "scan",
     placement: "top",
   },
   {
-    kicker: "step 03 // critical",
-    title: "Verify GitHub to claim",
+    kicker: "03 · claim",
+    title: "Verify GitHub to save",
     body:
-      "Preview scans do not stick. To save your profile to Most Wanted, click --verify-github in the nav and sign in with the same GitHub account you scanned. Then scan again to claim.",
-    callout: "Same account or it stays a ghost preview",
+      "Preview scans don't stick. Hit --verify-github in the nav, sign in with the same account you scanned, then scan again to claim your trainer on Most Wanted.",
+    callout: "same GitHub account · or it stays a ghost preview",
     target: "verify-github",
     placement: "bottom",
+    critical: true,
   },
   {
-    kicker: "step 04 // optional loot",
-    title: "Bounties & daily pick",
+    kicker: "04 · bounties",
+    title: "Most Wanted & daily pick",
     body:
-      "Claimed trainers land on Most Wanted (--bounties). After claiming, spin the reel for a featured card. Your dossier unlocks daily pick and the photobooth.",
-    callout: "Leaderboard → reel → dossier perks",
+      "Claimed trainers land on the leaderboard (--bounties). Spin the reel for a featured card and unlock daily pick plus the photobooth.",
+    callout: "leaderboard → reel → dossier perks",
     target: "bounties",
     route: "/wanted",
     placement: "bottom",
@@ -97,6 +103,66 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function getNavInset(): number {
+  const nav = document.querySelector<HTMLElement>(NAV_SELECTOR);
+  if (!nav) return 0;
+  return nav.getBoundingClientRect().height + 8;
+}
+
+type SafeMargins = {
+  top: number;
+  bottom: number;
+  side: number;
+};
+
+function getSafeMargins(): SafeMargins {
+  const insetTop = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-top)") || "0",
+  );
+  const insetBottom = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-bottom)") ||
+      "0",
+  );
+  return {
+    top: Math.max(VIEW_MARGIN, insetTop || 0) + getNavInset(),
+    bottom: Math.max(VIEW_MARGIN, insetBottom || 0),
+    side: Math.max(
+      VIEW_MARGIN,
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-left)") ||
+          "0",
+      ) || 0,
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-right)") ||
+          "0",
+      ) || 0,
+    ),
+  };
+}
+
+function isInStickyNav(el: HTMLElement): boolean {
+  return Boolean(el.closest(NAV_SELECTOR));
+}
+
+async function waitForScrollSettled(reduced: boolean): Promise<void> {
+  if (reduced) return;
+
+  const start = performance.now();
+  let lastY = window.scrollY;
+  let stable = 0;
+
+  while (performance.now() - start < SCROLL_MAX_MS) {
+    await sleep(SCROLL_POLL_MS);
+    if (window.scrollY === lastY) {
+      stable += 1;
+      if (stable >= SCROLL_STABLE_TICKS) return;
+    } else {
+      stable = 0;
+      lastY = window.scrollY;
+    }
+  }
 }
 
 function trapFocus(event: ReactKeyboardEvent<HTMLElement>, container: HTMLElement | null) {
@@ -119,7 +185,7 @@ function trapFocus(event: ReactKeyboardEvent<HTMLElement>, container: HTMLElemen
     return;
   }
 
-  if (active === last) {
+  if (active === last || !container.contains(active)) {
     event.preventDefault();
     first.focus();
   }
@@ -131,12 +197,13 @@ function pickPlacement(
   cardH: number,
   prefer: Placement | "auto",
 ): Placement {
+  const margins = getSafeMargins();
   const gap = CARD_GAP + ARROW_SIZE;
   const spaces: Record<Placement, number> = {
-    top: rect.top - VIEW_MARGIN,
-    bottom: window.innerHeight - rect.bottom - VIEW_MARGIN,
-    left: rect.left - VIEW_MARGIN,
-    right: window.innerWidth - rect.right - VIEW_MARGIN,
+    top: rect.top - margins.top,
+    bottom: window.innerHeight - rect.bottom - margins.bottom,
+    left: rect.left - margins.side,
+    right: window.innerWidth - rect.right - margins.side,
   };
 
   if (prefer !== "auto") {
@@ -159,6 +226,7 @@ function positionCard(
   cardW: number,
   cardH: number,
 ) {
+  const margins = getSafeMargins();
   const gap = CARD_GAP + ARROW_SIZE;
   let top = 0;
   let left = 0;
@@ -182,15 +250,15 @@ function positionCard(
       break;
   }
 
-  left = Math.max(VIEW_MARGIN, Math.min(left, window.innerWidth - cardW - VIEW_MARGIN));
-  top = Math.max(VIEW_MARGIN, Math.min(top, window.innerHeight - cardH - VIEW_MARGIN));
+  left = Math.max(margins.side, Math.min(left, window.innerWidth - cardW - margins.side));
+  top = Math.max(margins.top, Math.min(top, window.innerHeight - cardH - margins.bottom));
 
   const targetCenterX = rect.left + rect.width / 2;
   const targetCenterY = rect.top + rect.height / 2;
   const arrowOffset =
     placement === "top" || placement === "bottom"
-      ? Math.min(Math.max(targetCenterX - left, 24), cardW - 24)
-      : Math.min(Math.max(targetCenterY - top, 24), cardH - 24);
+      ? Math.min(Math.max(targetCenterX - left, ARROW_CLAMP), cardW - ARROW_CLAMP)
+      : Math.min(Math.max(targetCenterY - top, ARROW_CLAMP), cardH - ARROW_CLAMP);
 
   return { top, left, placement, arrowOffset };
 }
@@ -203,6 +271,7 @@ type Props = {
 export function OnboardingTour({ manual = false, onClose }: Props) {
   const titleId = useId();
   const bodyId = useId();
+  const liveId = useId();
   const router = useRouter();
   const pathname = usePathname();
   const cardRef = useRef<HTMLElement>(null);
@@ -215,6 +284,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     typeof window !== "undefined" ? prefersReducedMotion() : false,
   );
   const [preparing, setPreparing] = useState(false);
+  const [preparingLabel, setPreparingLabel] = useState("loading…");
   const [spotRect, setSpotRect] = useState<DOMRect | null>(null);
   const [cardPos, setCardPos] = useState<{
     top: number;
@@ -242,16 +312,19 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
 
     const cardW = card.offsetWidth;
     const cardH = card.offsetHeight;
+    const margins = getSafeMargins();
 
-    if (!step.target || !spotRect) {
+    if (!step.target) {
       setCardPos({
-        top: Math.max(VIEW_MARGIN, (window.innerHeight - cardH) / 2),
-        left: Math.max(VIEW_MARGIN, (window.innerWidth - cardW) / 2),
+        top: Math.max(margins.top, (window.innerHeight - cardH) / 2),
+        left: Math.max(margins.side, (window.innerWidth - cardW) / 2),
         placement: "bottom",
         arrowOffset: cardW / 2,
       });
       return;
     }
+
+    if (!spotRect) return;
 
     setCardPos(
       positionCard(
@@ -290,6 +363,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     async function prepareStep() {
       const step = STEPS[stepIndex];
       setPreparing(true);
+      setPreparingLabel(step.route && pathname !== step.route ? "routing…" : "locating…");
       setSpotRect(null);
       setCardPos(null);
       targetElRef.current = null;
@@ -299,8 +373,16 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         return;
       }
 
+      if (step.hash && typeof window !== "undefined") {
+        const hash = `#${step.hash}`;
+        if (window.location.hash !== hash) {
+          window.history.replaceState(null, "", `${pathname}${hash}`);
+        }
+      }
+
       let target: HTMLElement | null = null;
       if (step.target) {
+        setPreparingLabel("locating…");
         for (let attempt = 0; attempt < TARGET_RETRIES; attempt += 1) {
           if (cancelled) return;
           target = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
@@ -315,12 +397,26 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       }
 
       if (target) {
-        target.scrollIntoView({
-          behavior: reduced ? "auto" : "smooth",
-          block: "center",
-          inline: "nearest",
+        if (!isInStickyNav(target)) {
+          setPreparingLabel("scrolling…");
+          target.scrollIntoView({
+            behavior: reduced ? "auto" : "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+          await waitForScrollSettled(reduced);
+        } else if (!reduced) {
+          await sleep(120);
+        }
+
+        if (cancelled) return;
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
         });
-        if (!reduced) await sleep(SCROLL_WAIT_MS);
+
         if (cancelled) return;
         targetElRef.current = target;
         setSpotRect(target.getBoundingClientRect());
@@ -344,15 +440,22 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
 
+    let raf = 0;
+
     function refreshSpot() {
-      const el = targetElRef.current;
-      if (!el) return;
-      setSpotRect(el.getBoundingClientRect());
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const el = targetElRef.current;
+        if (!el) return;
+        setSpotRect(el.getBoundingClientRect());
+      });
     }
 
-    window.addEventListener("scroll", refreshSpot, true);
-    window.addEventListener("resize", refreshSpot);
+    window.addEventListener("scroll", refreshSpot, { capture: true, passive: true });
+    window.addEventListener("resize", refreshSpot, { passive: true });
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("scroll", refreshSpot, true);
       window.removeEventListener("resize", refreshSpot);
     };
@@ -366,7 +469,6 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     };
 
     window.addEventListener("keydown", onKey);
-    nextRef.current?.focus();
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -375,12 +477,18 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [dismiss, open, stepIndex]);
+  }, [dismiss, open]);
+
+  useEffect(() => {
+    if (!open || preparing) return;
+    nextRef.current?.focus({ preventScroll: true });
+  }, [open, preparing, stepIndex]);
 
   if (!open) return null;
 
   const step = STEPS[stepIndex];
   const last = stepIndex === STEPS.length - 1;
+  const welcome = stepIndex === 0;
   const centered = !step.target || !spotRect;
   const spotlightStyle = spotRect
     ? {
@@ -409,6 +517,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       )}
 
       <section
+        key={stepIndex}
         ref={cardRef}
         className="tour-card onboarding"
         role="dialog"
@@ -418,30 +527,22 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         aria-busy={preparing ? "true" : undefined}
         data-placement={cardPos?.placement}
         data-centered={centered ? "true" : undefined}
+        data-welcome={welcome ? "true" : undefined}
+        data-preparing={preparing ? "true" : undefined}
+        data-critical={step.critical ? "true" : undefined}
         style={
           cardPos
             ? {
                 top: cardPos.top,
                 left: cardPos.left,
+                ["--arrow-offset" as string]: `${cardPos.arrowOffset}px`,
               }
-            : {
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-              }
+            : undefined
         }
         onKeyDown={(event) => trapFocus(event, cardRef.current)}
       >
         {!centered && cardPos ? (
-          <span
-            className="tour-card__arrow"
-            aria-hidden="true"
-            style={
-              cardPos.placement === "top" || cardPos.placement === "bottom"
-                ? { left: cardPos.arrowOffset }
-                : { top: cardPos.arrowOffset }
-            }
-          />
+          <span className="tour-card__arrow" aria-hidden="true" />
         ) : null}
 
         <header className="onboarding__head">
@@ -456,25 +557,31 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         </p>
 
         {step.callout ? (
-          <p className="onboarding__callout" aria-label="Quick tip">
+          <p
+            className="onboarding__callout"
+            data-critical={step.critical ? "true" : undefined}
+          >
             {step.callout}
           </p>
         ) : null}
 
-        <ol
-          className="onboarding__progress"
-          aria-label={`Step ${stepIndex + 1} of ${STEPS.length}`}
-        >
-          {STEPS.map((_, index) => (
-            <li
-              key={index}
-              className="onboarding__dot"
-              data-active={index === stepIndex ? "true" : undefined}
-              data-done={index < stepIndex ? "true" : undefined}
-              aria-hidden="true"
-            />
-          ))}
-        </ol>
+        <div className="onboarding__progress-row">
+          <ol className="onboarding__progress" aria-label="Tutorial progress">
+            {STEPS.map((item, index) => (
+              <li
+                key={item.title}
+                className="onboarding__dot"
+                data-active={index === stepIndex ? "true" : undefined}
+                data-done={index < stepIndex ? "true" : undefined}
+                aria-current={index === stepIndex ? "step" : undefined}
+                aria-label={`Step ${index + 1} of ${STEPS.length}: ${item.title}`}
+              />
+            ))}
+          </ol>
+          <span className="onboarding__step-count" aria-hidden="true">
+            {String(stepIndex + 1).padStart(2, "0")}/{String(STEPS.length).padStart(2, "0")}
+          </span>
+        </div>
 
         <footer className="onboarding__actions">
           <button
@@ -488,7 +595,8 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
             {stepIndex > 0 ? (
               <button
                 type="button"
-                className="btn btn--ghost"
+                className="btn btn--ghost onboarding__back"
+                disabled={preparing}
                 onClick={() => setStepIndex((index) => Math.max(0, index - 1))}
               >
                 back
@@ -497,8 +605,9 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
             <button
               ref={nextRef}
               type="button"
-              className="btn"
+              className="btn onboarding__next"
               disabled={preparing}
+              data-state={preparing ? "loading" : undefined}
               onClick={() => {
                 if (last) {
                   dismiss("done");
@@ -507,13 +616,15 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
                 setStepIndex((index) => Math.min(STEPS.length - 1, index + 1));
               }}
             >
-              {preparing ? "scrolling…" : last ? "done" : "next"}
+              {preparing ? preparingLabel : last ? "start exploring" : "next"}
             </button>
           </span>
         </footer>
 
-        <p className="onboarding__hint">
-          Esc to skip · {stepIndex + 1}/{STEPS.length}
+        <p className="onboarding__hint" id={liveId} aria-live="polite">
+          {preparing
+            ? preparingLabel
+            : `Esc to skip · ${String(stepIndex + 1).padStart(2, "0")}/${String(STEPS.length).padStart(2, "0")}`}
         </p>
       </section>
     </div>
