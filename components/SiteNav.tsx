@@ -23,11 +23,11 @@ export async function SiteNav({ type }: Props) {
             <span className="nav-term__brand-name">commitdex</span>
             <span className="nav-term__brand-version">/ v0.1</span>
           </span>
-          <Link href="/#classify">--classify</Link>
-          <Link href="/wanted">--bounties</Link>
+          <Link href="/#classify" data-tour="classify-nav">--classify</Link>
+          <Link href="/wanted" data-tour="bounties">--bounties</Link>
         </span>
         {login ? (
-          <span className="nav-term__auth">
+          <span className="nav-term__auth" data-tour="verify-github">
             <Link
               className="nav-term__user"
               href={`/t/${encodeURIComponent(login)}`}
@@ -50,7 +50,7 @@ export async function SiteNav({ type }: Props) {
             </span>
           </span>
         ) : (
-          <span className="nav-term__auth">
+          <span className="nav-term__auth" data-tour="verify-github">
             <form
               className="nav-term__auth-form"
               action={async () => {

@@ -8,6 +8,7 @@ import {
 } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import { BootOverlay } from "@/components/BootOverlay";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import "./globals.css";
 
 const jetbrains = JetBrains_Mono({
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {`try{if(!sessionStorage.getItem("commitdex-booted")&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.dataset.boot="pending"}catch(e){}`}
         </Script>
         <BootOverlay />
+        <OnboardingTour />
         <AuthProvider>{children}</AuthProvider>
         <Analytics />
       </body>

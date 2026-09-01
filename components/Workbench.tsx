@@ -145,7 +145,7 @@ export function Workbench() {
   const stage = PRINT_STAGES[Math.min(stageIndex, PRINT_STAGES.length - 1)];
 
   return (
-    <section className="bench" id="classify">
+    <section className="bench" id="classify" data-tour="classify">
       <div className="bench__copy">
         <div className="bench__identity" aria-label="Commitdex classifier">
           <span className="bench__identity-mark" aria-hidden="true">CDX</span>

@@ -140,7 +140,7 @@ export function TrainerScan() {
   const showUnsavedNotice = status === "success" && handle && !saved && !showReel;
 
   return (
-    <section className="hunt" id="scan">
+    <section className="hunt" id="scan" data-tour="scan">
       <h2 className="hunt__head">Scan a trainer</h2>
       <p className="hunt__lede">
         Public GitHub username. We read commit messages and timestamps, never the diff. Verify the

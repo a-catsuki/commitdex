@@ -1,3 +1,5 @@
+import { TutorialReplayLink } from "@/components/TutorialReplayLink";
+
 export function SiteFooter() {
   return (
     <footer className="foot-stmt" id="about">
@@ -7,8 +9,16 @@ export function SiteFooter() {
       <div className="foot-stmt__meta">
         <span className="foot-stmt__mark">commitdex</span>
         <span className="muted">
-          Messages and timestamps only. Never the diff. © 2026
+          Messages and timestamps only. Never the diff. © 2026 · built by{" "}
+          <a
+            href="https://github.com/a-catsuki"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            @a-catsuki
+          </a>
         </span>
+        <TutorialReplayLink />
       </div>
     </footer>
   );
