@@ -94,7 +94,7 @@ export function toPublicError(error: unknown, kind: ErrorKind): PublicError {
     return { status: 502, message: kind === "spin" ? COPY.reelJam : COPY.jam };
   }
   if (
-    /Unexpected token|not valid JSON|did not return a card or trainer|safety filter|User Safety|too few predictions/i.test(
+    /Unexpected token|not valid JSON|did not return a card or trainer|safety filter|User Safety|hidden reasoning|too few predictions/i.test(
       detail,
     )
   ) {

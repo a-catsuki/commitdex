@@ -5,6 +5,8 @@ export const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
  * Resolve a model id from env. Rejects empty values, bare names without a
  * provider slash, and accidental `OPENROUTER_MODEL=OPENROUTER_MODEL` pollution.
  */
+const ROUTER_MODEL = /^openrouter\/(free|auto)$/i;
+
 function resolveModelId(raw: string | undefined, fallback: string): string {
   const id = raw?.trim() ?? "";
   if (!id) return fallback;
@@ -12,6 +14,8 @@ function resolveModelId(raw: string | undefined, fallback: string): string {
     return fallback;
   }
   if (!id.includes("/")) return fallback;
+  // Routers can hand off to safety/moderation models that return prose, not JSON.
+  if (ROUTER_MODEL.test(id)) return fallback;
   return id;
 }
 

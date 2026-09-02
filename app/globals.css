@@ -4712,6 +4712,16 @@ a {
 }
 
 /* Onboarding spotlight tour */
+html[data-tour-scroll-lock] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-tour-scroll-lock] body {
+  overflow: hidden;
+  touch-action: none;
+}
+
 .tour-overlay {
   position: fixed;
   inset: 0;
@@ -4752,8 +4762,17 @@ a {
     opacity var(--dur-short) var(--ease-out);
 }
 
+.tour-spotlight[data-preparing="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .tour-overlay[data-motion="reduce"] .tour-spotlight {
   transition: none;
+}
+
+.tour-overlay[data-motion="reduce"] .tour-spotlight[data-preparing="true"] {
+  opacity: 0;
 }
 
 .tour-card {
@@ -4764,14 +4783,21 @@ a {
   width: min(100vw - 2 * var(--space-sm), 26rem);
   max-height: min(86dvh, 32rem);
   animation: onboarding-in var(--dur-long) var(--ease-out) both;
+  transform: none;
   transition:
     top var(--dur-long) var(--ease-out),
     left var(--dur-long) var(--ease-out),
-    opacity var(--dur-short) var(--ease-out);
+    opacity var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
 }
 
 .tour-card[data-preparing="true"] {
+  top: 50%;
+  left: 50%;
   opacity: 0.78;
+  pointer-events: none;
+  animation: none;
+  transform: translate(-50%, -50%);
 }
 
 .tour-overlay[data-motion="reduce"] .tour-card {

@@ -46,7 +46,9 @@ function contentToText(
 ): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
+    const textParts = content.filter((part) => !part.type || part.type === "text");
+    const parts = textParts.length > 0 ? textParts : content;
+    return parts
       .map((part) => (typeof part.text === "string" ? part.text : ""))
       .join("\n");
   }
@@ -194,12 +196,22 @@ function parseReply(data: ChatResponse, requested: string): { parsed: Record<str
   const text = messageText(choice);
   if (!text.trim() || looksLikeSafetyOnly(text)) {
     const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens;
+    const finish = choice?.finish_reason ?? null;
     console.error("[commitdex:openrouter] empty JSON reply", {
       model: used,
-      finish: choice?.finish_reason ?? null,
+      finish,
       completion_tokens: data.usage?.completion_tokens ?? null,
       reasoning_tokens: reasoningTokens ?? null,
     });
+    if (
+      finish === "length" &&
+      (reasoningTokens ?? 0) > 0 &&
+      !text.trim()
+    ) {
+      throw new Error(
+        "The model spent its token budget on hidden reasoning instead of JSON. Retry the scan.",
+      );
+    }
     throw new Error(MODEL_JSON_ERROR);
   }
 
@@ -211,14 +223,14 @@ function parseReply(data: ChatResponse, requested: string): { parsed: Record<str
 
 /**
  * One HTTP attempt per call. No retries on 429/5xx, no fallback model chain,
- * no packed `models` array, no second pass with response_format.
+ * no packed `models` array, no second pass.
  */
 export async function completeJson(
   options: CompleteOptions,
 ): Promise<{ parsed: Record<string, unknown>; model: string }> {
   const model = (options.model?.trim() || OPENROUTER_MODEL).trim();
   if (!isRequestableModel(model)) {
-    throw new Error(MODEL_JSON_ERROR);
+    throw new Error(BAD_MODEL_ERROR);
   }
 
   const timeoutMs = options.timeoutMs ?? 12_000;
@@ -233,15 +245,17 @@ export async function completeJson(
     provider: {
       sort: "latency",
     },
+    // DeepSeek V4 Flash + json_object without reasoning disabled burns the whole
+    // completion budget on hidden chain-of-thought and returns null content.
+    response_format: { type: "json_object" },
+    reasoning: { effort: "none" },
   };
 
   if (typeof options.reasoningMaxTokens === "number") {
-    // Prefer a small budget over exclude:true — DeepSeek V4 Flash often
-    // returns null content when reasoning is excluded.
+    // Legacy override — do not pair with json_object / effort:none.
+    delete body.response_format;
     body.reasoning = { max_tokens: options.reasoningMaxTokens };
   }
-  // Do not send reasoning.exclude / enabled:false for DeepSeek V4 Flash —
-  // omit the field so completion tokens stay available for JSON.
 
   const data = await chatOnce(body, timeoutMs);
   return parseReply(data, model);

@@ -12,8 +12,16 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import {
   ONBOARDING_STORAGE_KEY,
+  getTourSafeMargins,
+  isInStickyTourNav,
   readOnboardingStatus,
+  scrollTourTargetIntoView,
+  setTourScrollLock,
+  tourSleep,
   waitForBootDismissed,
+  waitForNextPaint,
+  waitForScrollSettled,
+  waitForTourTarget,
   writeOnboardingStatus,
 } from "@/lib/onboarding";
 import { prefersReducedMotion } from "@/lib/ritual";
@@ -23,13 +31,6 @@ const SPOTLIGHT_PAD = 12;
 const CARD_GAP = 20;
 const ARROW_SIZE = 10;
 const ARROW_CLAMP = 32;
-const VIEW_MARGIN = 16;
-const SCROLL_MAX_MS = 720;
-const SCROLL_POLL_MS = 48;
-const SCROLL_STABLE_TICKS = 3;
-const TARGET_RETRY_MS = 120;
-const TARGET_RETRIES = 24;
-const NAV_SELECTOR = ".nav-term";
 
 type Placement = "top" | "bottom" | "left" | "right";
 
@@ -99,72 +100,6 @@ const STEPS: TourStep[] = [
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-function getNavInset(): number {
-  const nav = document.querySelector<HTMLElement>(NAV_SELECTOR);
-  if (!nav) return 0;
-  return nav.getBoundingClientRect().height + 8;
-}
-
-type SafeMargins = {
-  top: number;
-  bottom: number;
-  side: number;
-};
-
-function getSafeMargins(): SafeMargins {
-  const insetTop = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-top)") || "0",
-  );
-  const insetBottom = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-bottom)") ||
-      "0",
-  );
-  return {
-    top: Math.max(VIEW_MARGIN, insetTop || 0) + getNavInset(),
-    bottom: Math.max(VIEW_MARGIN, insetBottom || 0),
-    side: Math.max(
-      VIEW_MARGIN,
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-left)") ||
-          "0",
-      ) || 0,
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-right)") ||
-          "0",
-      ) || 0,
-    ),
-  };
-}
-
-function isInStickyNav(el: HTMLElement): boolean {
-  return Boolean(el.closest(NAV_SELECTOR));
-}
-
-async function waitForScrollSettled(reduced: boolean): Promise<void> {
-  if (reduced) return;
-
-  const start = performance.now();
-  let lastY = window.scrollY;
-  let stable = 0;
-
-  while (performance.now() - start < SCROLL_MAX_MS) {
-    await sleep(SCROLL_POLL_MS);
-    if (window.scrollY === lastY) {
-      stable += 1;
-      if (stable >= SCROLL_STABLE_TICKS) return;
-    } else {
-      stable = 0;
-      lastY = window.scrollY;
-    }
-  }
-}
-
 function trapFocus(event: ReactKeyboardEvent<HTMLElement>, container: HTMLElement | null) {
   if (event.key !== "Tab" || !container) return;
 
@@ -197,7 +132,7 @@ function pickPlacement(
   cardH: number,
   prefer: Placement | "auto",
 ): Placement {
-  const margins = getSafeMargins();
+  const margins = getTourSafeMargins();
   const gap = CARD_GAP + ARROW_SIZE;
   const spaces: Record<Placement, number> = {
     top: rect.top - margins.top,
@@ -226,7 +161,7 @@ function positionCard(
   cardW: number,
   cardH: number,
 ) {
-  const margins = getSafeMargins();
+  const margins = getTourSafeMargins();
   const gap = CARD_GAP + ARROW_SIZE;
   let top = 0;
   let left = 0;
@@ -277,6 +212,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   const cardRef = useRef<HTMLElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const targetElRef = useRef<HTMLElement | null>(null);
+  const prepareTokenRef = useRef(0);
 
   const [open, setOpen] = useState(manual);
   const [stepIndex, setStepIndex] = useState(0);
@@ -300,41 +236,56 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       targetElRef.current = null;
       setSpotRect(null);
       setCardPos(null);
+      setTourScrollLock(false);
       onClose?.();
     },
     [onClose],
   );
 
-  const measureCard = useCallback(() => {
-    const step = STEPS[stepIndex];
-    const card = cardRef.current;
-    if (!card) return;
+  const measureCard = useCallback(
+    (rectOverride?: DOMRect | null) => {
+      if (preparing) return;
 
-    const cardW = card.offsetWidth;
-    const cardH = card.offsetHeight;
-    const margins = getSafeMargins();
+      const step = STEPS[stepIndex];
+      const card = cardRef.current;
+      if (!card) return;
 
-    if (!step.target) {
-      setCardPos({
-        top: Math.max(margins.top, (window.innerHeight - cardH) / 2),
-        left: Math.max(margins.side, (window.innerWidth - cardW) / 2),
-        placement: "bottom",
-        arrowOffset: cardW / 2,
-      });
-      return;
-    }
+      const cardW = card.offsetWidth;
+      const cardH = card.offsetHeight;
+      const margins = getTourSafeMargins();
 
-    if (!spotRect) return;
+      if (!step.target) {
+        setCardPos({
+          top: Math.max(margins.top, (window.innerHeight - cardH) / 2),
+          left: Math.max(margins.side, (window.innerWidth - cardW) / 2),
+          placement: "bottom",
+          arrowOffset: cardW / 2,
+        });
+        return;
+      }
 
-    setCardPos(
-      positionCard(
-        spotRect,
-        pickPlacement(spotRect, cardW, cardH, step.placement ?? "auto"),
-        cardW,
-        cardH,
-      ),
-    );
-  }, [spotRect, stepIndex]);
+      const targetRect = rectOverride ?? spotRect;
+      if (!targetRect) return;
+
+      setCardPos(
+        positionCard(
+          targetRect,
+          pickPlacement(targetRect, cardW, cardH, step.placement ?? "auto"),
+          cardW,
+          cardH,
+        ),
+      );
+    },
+    [preparing, spotRect, stepIndex],
+  );
+
+  const syncSpotAndCard = useCallback(() => {
+    const el = targetElRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setSpotRect(rect);
+    measureCard(rect);
+  }, [measureCard]);
 
   useEffect(() => {
     if (manual) return;
@@ -345,7 +296,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     void (async () => {
       await waitForBootDismissed();
       if (cancelled) return;
-      await sleep(BOOT_SETTLE_MS);
+      await tourSleep(BOOT_SETTLE_MS);
       if (cancelled || readOnboardingStatus()) return;
       setOpen(true);
     })();
@@ -358,17 +309,24 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
 
+    const token = prepareTokenRef.current + 1;
+    prepareTokenRef.current = token;
     let cancelled = false;
+    const isStale = () => cancelled || prepareTokenRef.current !== token;
 
     async function prepareStep() {
       const step = STEPS[stepIndex];
       setPreparing(true);
-      setPreparingLabel(step.route && pathname !== step.route ? "routing…" : "locating…");
-      setSpotRect(null);
+      setPreparingLabel("loading…");
       setCardPos(null);
       targetElRef.current = null;
 
+      if (!step.target) {
+        setSpotRect(null);
+      }
+
       if (step.route && pathname !== step.route) {
+        setPreparingLabel("routing…");
         router.push(`${step.route}${step.hash ? `#${step.hash}` : ""}`);
         return;
       }
@@ -380,16 +338,16 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         }
       }
 
+      await waitForNextPaint();
+      if (isStale()) return;
+
       let target: HTMLElement | null = null;
       if (step.target) {
         setPreparingLabel("locating…");
-        for (let attempt = 0; attempt < TARGET_RETRIES; attempt += 1) {
-          if (cancelled) return;
-          target = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
-          if (target) break;
-          await sleep(TARGET_RETRY_MS);
-        }
+        target = await waitForTourTarget(`[data-tour="${step.target}"]`, isStale);
       }
+
+      if (isStale()) return;
 
       if (step.target && !target) {
         setPreparing(false);
@@ -397,29 +355,20 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       }
 
       if (target) {
-        if (!isInStickyNav(target)) {
+        if (!isInStickyTourNav(target)) {
           setPreparingLabel("scrolling…");
-          target.scrollIntoView({
-            behavior: reduced ? "auto" : "smooth",
-            block: "center",
-            inline: "nearest",
-          });
+          scrollTourTargetIntoView(target, reduced);
           await waitForScrollSettled(reduced);
         } else if (!reduced) {
-          await sleep(120);
+          await tourSleep(120);
         }
 
-        if (cancelled) return;
+        if (isStale()) return;
 
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => resolve());
-          });
-        });
+        await waitForNextPaint();
+        if (isStale()) return;
 
-        if (cancelled) return;
         targetElRef.current = target;
-        setSpotRect(target.getBoundingClientRect());
       }
 
       setPreparing(false);
@@ -433,12 +382,26 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   }, [open, pathname, reduced, router, stepIndex]);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setTourScrollLock(false);
+      return;
+    }
+
+    setTourScrollLock(!preparing);
+
+    if (preparing) return;
+
+    const step = STEPS[stepIndex];
+    if (step.target) {
+      syncSpotAndCard();
+      return;
+    }
+
     measureCard();
-  }, [measureCard, open, preparing, spotRect, stepIndex]);
+  }, [measureCard, open, preparing, stepIndex, syncSpotAndCard]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || preparing) return;
 
     let raf = 0;
 
@@ -446,9 +409,8 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        const el = targetElRef.current;
-        if (!el) return;
-        setSpotRect(el.getBoundingClientRect());
+        if (preparing) return;
+        syncSpotAndCard();
       });
     }
 
@@ -459,7 +421,19 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       window.removeEventListener("scroll", refreshSpot, true);
       window.removeEventListener("resize", refreshSpot);
     };
-  }, [open, stepIndex]);
+  }, [open, preparing, stepIndex, syncSpotAndCard]);
+
+  useEffect(() => {
+    if (!open || preparing) return;
+    const card = cardRef.current;
+    if (!card) return;
+
+    const observer = new ResizeObserver(() => {
+      measureCard();
+    });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [measureCard, open, preparing, stepIndex]);
 
   useEffect(() => {
     if (!open) return;
@@ -470,14 +444,16 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
 
     window.addEventListener("keydown", onKey);
 
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
     };
   }, [dismiss, open]);
+
+  useEffect(() => {
+    if (!open) {
+      setTourScrollLock(false);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open || preparing) return;
@@ -489,7 +465,8 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   const step = STEPS[stepIndex];
   const last = stepIndex === STEPS.length - 1;
   const welcome = stepIndex === 0;
-  const centered = !step.target || !spotRect;
+  const centered = !step.target || welcome;
+  const showSpotlight = Boolean(spotRect && step.target);
   const spotlightStyle = spotRect
     ? {
         top: spotRect.top - SPOTLIGHT_PAD,
@@ -504,11 +481,13 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       className="tour-overlay"
       data-motion={reduced ? "reduce" : "full"}
       data-centered={centered ? "true" : undefined}
+      data-preparing={preparing ? "true" : undefined}
       role="presentation"
     >
-      {spotRect ? (
+      {showSpotlight ? (
         <div
           className="tour-spotlight"
+          data-preparing={preparing ? "true" : undefined}
           style={spotlightStyle}
           aria-hidden="true"
         />
@@ -517,7 +496,6 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       )}
 
       <section
-        key={stepIndex}
         ref={cardRef}
         className="tour-card onboarding"
         role="dialog"
@@ -541,7 +519,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         }
         onKeyDown={(event) => trapFocus(event, cardRef.current)}
       >
-        {!centered && cardPos ? (
+        {!centered && cardPos && !preparing ? (
           <span className="tour-card__arrow" aria-hidden="true" />
         ) : null}
 
