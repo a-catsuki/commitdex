@@ -163,31 +163,21 @@ export async function waitForScrollSettled(reduced: boolean): Promise<void> {
     return;
   }
 
-  let settled = false;
-
-  await Promise.race([
-    new Promise<void>((resolve) => {
-      if (!("onscrollend" in window)) {
-        resolve();
-        return;
-      }
-
-      const onScrollEnd = () => {
-        settled = true;
-        window.removeEventListener("scrollend", onScrollEnd);
+  const browserWindow = window as Window & { onscrollend?: EventListener };
+  if ("onscrollend" in browserWindow) {
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        browserWindow.removeEventListener("scrollend", onScrollEnd);
+        browserWindow.clearTimeout(timeout);
         resolve();
       };
-
-      window.addEventListener("scrollend", onScrollEnd, { passive: true });
-      window.setTimeout(() => {
-        window.removeEventListener("scrollend", onScrollEnd);
-        resolve();
-      }, TOUR_SCROLL_MAX_MS);
-    }),
-    tourSleep(TOUR_SCROLL_MAX_MS),
-  ]);
-
-  if (settled) {
+      const onScrollEnd = () => finish();
+      const timeout = browserWindow.setTimeout(finish, TOUR_SCROLL_MAX_MS);
+      browserWindow.addEventListener("scrollend", onScrollEnd, { passive: true });
+    });
     await waitForNextPaint();
     return;
   }
@@ -213,8 +203,6 @@ export async function waitForScrollSettled(reduced: boolean): Promise<void> {
   await waitForNextPaint();
 }
 
-let tourScrollLockDepth = 0;
-
 function getTourScrollbarWidth(): number {
   return Math.max(0, window.innerWidth - document.documentElement.clientWidth);
 }
@@ -230,16 +218,11 @@ function applyTourScrollbarCompensation(active: boolean): void {
 
 export function setTourScrollLock(locked: boolean): void {
   if (locked) {
-    tourScrollLockDepth += 1;
-    if (tourScrollLockDepth > 1) return;
     document.documentElement.setAttribute("data-tour-scroll-lock", "");
     applyTourScrollbarCompensation(true);
     return;
   }
 
-  tourScrollLockDepth = Math.max(0, tourScrollLockDepth - 1);
-  if (tourScrollLockDepth > 0) return;
-  tourScrollLockDepth = 0;
   document.documentElement.removeAttribute("data-tour-scroll-lock");
   applyTourScrollbarCompensation(false);
 }

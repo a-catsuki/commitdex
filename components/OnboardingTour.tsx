@@ -27,6 +27,7 @@ import {
 import { prefersReducedMotion } from "@/lib/ritual";
 
 const BOOT_SETTLE_MS = 320;
+const REPLAY_TUTORIAL_EVENT = "commitdex:replay-tutorial";
 const SPOTLIGHT_PAD = 12;
 const CARD_GAP = 20;
 const ARROW_SIZE = 10;
@@ -213,6 +214,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const targetElRef = useRef<HTMLElement | null>(null);
   const spotRectRef = useRef<DOMRect | null>(null);
+  const scrollLockRef = useRef(false);
   const prepareTokenRef = useRef(0);
 
   const [open, setOpen] = useState(manual);
@@ -242,6 +244,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       setSpotRect(null);
       setCardPos(null);
       setTourScrollLock(false);
+      scrollLockRef.current = false;
       onClose?.();
     },
     [onClose],
@@ -309,6 +312,18 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     return () => {
       cancelled = true;
     };
+  }, [manual]);
+
+  useEffect(() => {
+    if (manual) return;
+
+    const replay = () => {
+      setStepIndex(0);
+      setOpen(true);
+    };
+
+    window.addEventListener(REPLAY_TUTORIAL_EVENT, replay);
+    return () => window.removeEventListener(REPLAY_TUTORIAL_EVENT, replay);
   }, [manual]);
 
   useEffect(() => {
@@ -388,12 +403,17 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   }, [open, pathname, reduced, router, stepIndex]);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setTourScrollLock(false);
-      return;
+    const shouldLockScroll = open && !preparing;
+    if (scrollLockRef.current !== shouldLockScroll) {
+      setTourScrollLock(shouldLockScroll);
+      scrollLockRef.current = shouldLockScroll;
     }
 
-    setTourScrollLock(!preparing);
+    if (!open) {
+      setTourScrollLock(false);
+      scrollLockRef.current = false;
+      return;
+    }
 
     if (preparing) return;
 
@@ -454,12 +474,6 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       window.removeEventListener("keydown", onKey);
     };
   }, [dismiss, open]);
-
-  useEffect(() => {
-    if (!open) {
-      setTourScrollLock(false);
-    }
-  }, [open]);
 
   useEffect(() => {
     if (!open || preparing) return;
@@ -595,6 +609,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
               onClick={() => {
                 if (last) {
                   dismiss("done");
+                  router.push("/");
                   return;
                 }
                 setStepIndex((index) => Math.min(STEPS.length - 1, index + 1));
