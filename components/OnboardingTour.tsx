@@ -212,6 +212,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
   const cardRef = useRef<HTMLElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const targetElRef = useRef<HTMLElement | null>(null);
+  const spotRectRef = useRef<DOMRect | null>(null);
   const prepareTokenRef = useRef(0);
 
   const [open, setOpen] = useState(manual);
@@ -228,6 +229,10 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
     placement: Placement;
     arrowOffset: number;
   } | null>(null);
+
+  useLayoutEffect(() => {
+    spotRectRef.current = spotRect;
+  }, [spotRect]);
 
   const dismiss = useCallback(
     (status: "done" | "skipped") => {
@@ -264,7 +269,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         return;
       }
 
-      const targetRect = rectOverride ?? spotRect;
+      const targetRect = rectOverride ?? spotRectRef.current;
       if (!targetRect) return;
 
       setCardPos(
@@ -276,7 +281,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
         ),
       );
     },
-    [preparing, spotRect, stepIndex],
+    [preparing, stepIndex],
   );
 
   const syncSpotAndCard = useCallback(() => {
@@ -328,6 +333,7 @@ export function OnboardingTour({ manual = false, onClose }: Props) {
       if (step.route && pathname !== step.route) {
         setPreparingLabel("routing…");
         router.push(`${step.route}${step.hash ? `#${step.hash}` : ""}`);
+        setPreparing(false);
         return;
       }
 
