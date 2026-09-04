@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:photobooth": "node --experimental-strip-types --test scripts/photobooth-coordinates.test.mjs"
+    "test:photobooth": "node --experimental-strip-types --test scripts/photobooth-coordinates.test.mjs",
+    "test:generation": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-resolver.mjs --test scripts/generation-regressions.test.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

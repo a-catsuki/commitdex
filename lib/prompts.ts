@@ -26,9 +26,9 @@ dominant_type: exactly one of lazy, vague, panic, overconfident, passive-aggress
 
 stats 0–100 (clarity, effort, honesty, chaos): spirit of the batch, not a literal mean.
 
-predictions: exactly 3–5 items, each using a distinct category from this allowlist:
+predictions: return 1–5 items, each using a distinct category from this allowlist. Aim for 3–5 only when the commit batch supports that many evidence lanes:
 ${predictionCategoryPromptList()}
-Only choose categories supported by explicit evidence in this commit batch. Omit a category when its evidence lane is absent. Never duplicate a category, invent evidence, or turn a broad vibe into a category.
+Only choose categories supported by explicit evidence in this commit batch. Omit a category when its evidence lane is absent—even when that leaves fewer than three predictions. Never duplicate a category, invent evidence, or turn a broad vibe into a category.
 
 Category contracts (these are hard boundaries):
 - cafe_order / CAFÉ ORDER: one specific drink, order, or customization inferred ONLY from drink, cafe, or caffeine evidence. The title names that order; the punchline jokes about that order.

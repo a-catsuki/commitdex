@@ -27,7 +27,11 @@ const FLAVOR_MAX = 320;
 const FLAVOR_FALLBACK = "This species has not been documented.";
 
 export function clampCardName(raw: string): string {
-  const compact = raw.replace(/\s+/g, "").toLowerCase();
+  const compact = raw
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z]/g, "")
+    .toLowerCase();
   if (!compact) return "missingno";
 
   let slice = compact.slice(0, CARD_NAME_MAX);
@@ -35,6 +39,29 @@ export function clampCardName(raw: string): string {
     slice = slice.slice(0, -1);
   }
   return slice || compact.slice(0, CARD_NAME_MAX);
+}
+
+/** A message-seeded rescue name for malformed or too-short model output. */
+function fallbackCardName(message: string): string {
+  let hash = 2166136261;
+  for (const char of message.toLowerCase()) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  const onsets = ["b", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z"];
+  const vowels = ["a", "e", "i", "o", "u"];
+  const endings = ["n", "r", "l", "m", "s", "th"];
+  const pick = <T,>(items: readonly T[]) => {
+    hash = Math.imul(hash ^ (hash >>> 16), 2246822519) >>> 0;
+    return items[hash % items.length];
+  };
+  return `${pick(onsets)}${pick(vowels)}${pick(onsets)}${pick(vowels)}${pick(endings)}`;
+}
+
+function normalizeCreatureName(raw: unknown, message: string): string {
+  if (typeof raw !== "string") return fallbackCardName(message);
+  const name = clampCardName(raw);
+  return name === "missingno" || name.length < 5 ? fallbackCardName(message) : name;
 }
 
 function clampFlavor(raw: string): string {
@@ -66,10 +93,7 @@ function clampFlavor(raw: string): string {
 function normalizeCard(raw: RawCard, message: string, modelId: string): CreatureCard {
   const type = typeof raw.type === "string" && isCreatureType(raw.type) ? raw.type : "chaotic";
   const rarity = typeof raw.rarity === "string" && isRarity(raw.rarity) ? raw.rarity : "common";
-  const name =
-    typeof raw.name === "string" && raw.name.trim().length > 0
-      ? clampCardName(raw.name)
-      : "missingno";
+  const name = normalizeCreatureName(raw.name, message);
   const flavor =
     typeof raw.flavor_text === "string" && raw.flavor_text.trim().length > 0
       ? clampFlavor(raw.flavor_text)

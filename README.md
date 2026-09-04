@@ -83,7 +83,7 @@ Copy `.env.example` to `.env.local`. Never commit secrets.
 | `AUTH_SECRET` | For claims | Auth.js session secret (`openssl rand -base64 32`) |
 | `AUTH_GITHUB_ID` | For claims | GitHub OAuth App client ID |
 | `AUTH_GITHUB_SECRET` | For claims | GitHub OAuth App client secret |
-| `AUTH_URL` | No | Auth.js base URL; usually inferred from the host |
+| `AUTH_URL` | No | Auth.js base URL; production uses `https://commitdex.vercel.app` |
 | `CLOUDFLARE_ACCOUNT_ID` | For D1 | Cloudflare account ID |
 | `CLOUDFLARE_API_TOKEN` | For D1 | Token with D1 edit permission |
 | `CLOUDFLARE_D1_TOKEN` | No | Accepted alias for `CLOUDFLARE_API_TOKEN` |
@@ -99,7 +99,7 @@ Create a [GitHub OAuth App](https://github.com/settings/developers):
 
 1. **Homepage URL:** `http://localhost:3000` (or your deploy URL)
 2. **Authorization callback URL:** `http://localhost:3000/api/auth/callback/github`
-3. For production, use `https://YOUR_DOMAIN/api/auth/callback/github`
+3. For production, use `https://commitdex.vercel.app/api/auth/callback/github`
 4. Copy the client ID and secret into `.env.local`
 
 ---
@@ -207,8 +207,8 @@ auth.ts                            GitHub OAuth / Auth.js configuration
 Commitdex is designed to run on **Vercel** with **Cloudflare D1** for persistence.
 
 1. Push the repository to GitHub and import it in Vercel.
-2. Add all required environment variables in the Vercel project settings (mirror `.env.example`).
-3. Set GitHub OAuth callback URLs to your production domain.
+2. Add all required environment variables in the Vercel project settings (mirror `.env.example`) and set Production `AUTH_URL` to `https://commitdex.vercel.app`.
+3. In the GitHub OAuth App, set the Authorization callback URL to `https://commitdex.vercel.app/api/auth/callback/github`.
 4. Provision Cloudflare D1 and run schema/migrations (see [Cloudflare D1 setup](#cloudflare-d1-setup)).
 5. Optionally configure R2 for mugshot storage at scale.
 

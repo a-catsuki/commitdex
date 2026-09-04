@@ -136,7 +136,12 @@ function normalizePredictions(raw: unknown, commits: GitHubCommit[]): Prediction
     .slice(0, 5);
 }
 
-function normalizeProfile(raw: RawProfile, commits: GitHubCommit[]): ProfileDraft {
+/**
+ * A narrow or recent public history may only support one or two of the
+ * evidence lanes. Keep those grounded predictions instead of rejecting the
+ * entire trainer dossier and asking the model to invent more evidence.
+ */
+export function normalizeProfile(raw: RawProfile, commits: GitHubCommit[]): ProfileDraft {
   const type =
     typeof raw.dominant_type === "string" && isCreatureType(raw.dominant_type)
       ? raw.dominant_type
@@ -146,8 +151,8 @@ function normalizeProfile(raw: RawProfile, commits: GitHubCommit[]): ProfileDraf
       ? raw.persona_title.trim().slice(0, 80)
       : "unclassified trainer";
   const predictions = normalizePredictions(raw.predictions, commits);
-  if (predictions.length < 3) {
-    throw new Error("The model returned too few predictions. Retry the scan.");
+  if (predictions.length === 0) {
+    throw new Error("The model returned no evidence-backed predictions. Retry the scan.");
   }
   return {
     dominant_type: type,
